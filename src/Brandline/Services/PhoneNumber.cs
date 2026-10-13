@@ -39,7 +39,7 @@ public static partial class PhoneNumber
     }
 
     /// <summary>
-    /// Liest die Nummer aus einem tel:/callto:/sip:-Link, z. B. "tel:+49%2089%20123456;ext=12".
+    /// Liest die Nummer aus einem tel:/callto:/sip:/brandline:-Link, z. B. "tel:+49%2089%20123456;ext=12".
     /// Liefert null, wenn das Argument kein solcher Link ist.
     /// </summary>
     public static string? FromUri(string uri)
@@ -65,7 +65,7 @@ public static partial class PhoneNumber
         return null;
     }
 
-    [GeneratedRegex(@"^(tel|callto|sip|sips):(.*)$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^(tel|callto|sip|sips|brandline):(.*)$", RegexOptions.IgnoreCase)]
     private static partial Regex UriPattern();
 
     [GeneratedRegex(@"\+?\(?\d[\d\s\-/().]{1,}\d")]

@@ -84,6 +84,32 @@ public static class SystemIntegration
         }
     }
 
+    // ---------------- brandline: ----------------
+
+    /// <summary>Eigenes Link-Schema, das immer brandline öffnet.</summary>
+    public const string OwnScheme = "brandline";
+
+    /// <summary>
+    /// Registriert brandline:&lt;Nummer&gt; (z. B. aus dem Outlook-Add-in). Anders als bei tel: muss dafür
+    /// keine Standard-App gewählt werden – sonst landete der Klick womöglich bei Teams.
+    /// </summary>
+    public static void RegisterOwnScheme()
+    {
+        using var key = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{OwnScheme}");
+        key.SetValue("", $"URL:{AppName}");
+        key.SetValue("URL Protocol", "");
+        using (var icon = key.CreateSubKey("DefaultIcon")) icon.SetValue("", $"\"{ExePath}\",0");
+        using var cmd = key.CreateSubKey(@"shell\open\command");
+        cmd.SetValue("", $"\"{ExePath}\" \"%1\"");
+    }
+
+    private static void RemoveOwnScheme()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{OwnScheme}");
+        if (key != null && IsOurs(key))
+            Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{OwnScheme}", throwOnMissingSubKey: false);
+    }
+
     private static bool IsOurs(RegistryKey protocolKey, string marker = "brandline")
     {
         using var cmd = protocolKey.OpenSubKey(@"shell\open\command");
@@ -220,6 +246,7 @@ public static class SystemIntegration
     {
         try { SetAutostart(false); } catch { /* ignorieren */ }
         try { SetTelLinkRegistration(false); } catch { /* ignorieren */ }
+        try { RemoveOwnScheme(); } catch { /* ignorieren */ }
     }
 
     /// <summary>Schickt einen Befehl ("show" oder "dial &lt;Nummer&gt;") an die bereits laufende Instanz.</summary>

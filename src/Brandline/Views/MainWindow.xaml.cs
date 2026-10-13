@@ -947,6 +947,7 @@ public partial class MainWindow : Window
         {
             SystemIntegration.SetAutostart(settings.StartWithWindows);
             SystemIntegration.SetTelLinkRegistration(settings.RegisterTelLinks);
+            SystemIntegration.RegisterOwnScheme();
         }
         catch (Exception ex)
         {

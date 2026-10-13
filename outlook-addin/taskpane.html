@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>brandline</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="taskpane.css">
+</head>
+<body>
+    <header>
+        <span class="mark"></span><b>brand</b>line
+    </header>
+
+    <main>
+        <section id="sender" hidden>
+            <div class="label">Absender</div>
+            <div id="senderName" class="name"></div>
+            <div id="senderMail" class="muted"></div>
+        </section>
+
+        <section>
+            <div class="label" id="numbersTitle">Telefonnummern in dieser Nachricht</div>
+            <ul id="numbers"></ul>
+            <p id="empty" class="muted" hidden>Keine Telefonnummern gefunden.</p>
+            <p id="loading" class="muted">Lese Nachricht …</p>
+        </section>
+
+        <section>
+            <div class="label">Andere Nummer</div>
+            <form id="manual" class="row">
+                <input id="manualNumber" type="tel" placeholder="z. B. 030 123456" autocomplete="off">
+                <button type="submit" class="call">Anrufen</button>
+            </form>
+        </section>
+
+        <details id="help">
+            <summary>Es passiert nichts beim Klick?</summary>
+            <p class="muted">
+                brandline (ab Version 0.9) muss auf diesem PC installiert sein. Beim ersten Klick fragt Outlook
+                bzw. Windows eventuell, ob der Link mit brandline geöffnet werden darf – bitte erlauben.
+            </p>
+            <p class="muted">Alternative Wege für die Testnummer oben (zur Fehlersuche):</p>
+            <div class="row wrap" id="diag"></div>
+            <p id="diagResult" class="muted"></p>
+        </details>
+    </main>
+
+    <script src="taskpane.js"></script>
+</body>
+</html>

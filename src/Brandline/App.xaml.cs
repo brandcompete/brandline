@@ -11,7 +11,7 @@ namespace Brandline;
 /// ihren Befehl an die laufende Instanz weiter und beenden sich sofort.
 ///
 /// Argumente:  --background      Start ohne Fenster (Autostart), nur Symbol im Infobereich
-///             tel:/callto:/sip:  Nummer wählen
+///             tel:/callto:/sip:/brandline:  Nummer wählen
 ///             --dial &lt;Nummer&gt;  Nummer wählen
 ///             --exit                laufende Instanz beenden (Installer, vor Update/Deinstallation)
 ///             --uninstall-cleanup   wie --exit, zusätzlich Autostart und tel:-Links entfernen

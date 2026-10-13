@@ -57,4 +57,10 @@ $latest = [ordered]@{
 $json = $latest | ConvertTo-Json
 [System.IO.File]::WriteAllText((Join-Path $outDir 'latest.json'), $json, [System.Text.UTF8Encoding]::new($false))
 
-Write-Host ("Fertig: {0} ({1:N1} MB) + latest.json" -f $msi, ((Get-Item $msi).Length / 1MB)) -ForegroundColor Green
+# Outlook-Add-in: Dateien für den Webserver (…/brandline/outlook/), ohne Tests
+$outlookOut = Join-Path $outDir 'outlook'
+if (Test-Path $outlookOut) { Remove-Item -Recurse -Force $outlookOut }
+Copy-Item -Recurse (Join-Path $root 'outlook-addin') $outlookOut
+Remove-Item -Recurse -Force (Join-Path $outlookOut 'test')
+
+Write-Host ("Fertig: {0} ({1:N1} MB) + latest.json + outlook\" -f $msi, ((Get-Item $msi).Length / 1MB)) -ForegroundColor Green

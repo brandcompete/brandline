@@ -128,6 +128,31 @@ Der Server sollte `latest.json` nicht lange zwischenspeichern (kurzes `Cache-Con
 
 Das Token liegt verschlüsselt (DPAPI) unter `%APPDATA%\Brandline\msal.cache`, die Kontakte in `m365-contacts.json`.
 
+## Outlook-Add-in
+
+Schaltfläche **„Anrufen“** (Gruppe „brandline“) beim Lesen von E-Mails und Terminen – im klassischen und im neuen
+Outlook für Windows sowie in Outlook im Web. Der Aufgabenbereich zeigt Absender bzw. Organisator und alle
+Telefonnummern aus Text und Ort (mit Art: Telefon/Mobil/Fax; Datum, IBAN, Register- und Belegnummern werden
+ignoriert), dazu ein Feld für eine beliebige Nummer. Er lässt sich anheften und folgt dann der gewählten Nachricht.
+
+**So kommt der Klick zu brandline:** über einen Link `brandline:<Nummer>`, den Windows an die App übergibt
+(brandline registriert das Schema bei jedem Start im Benutzerprofil). Ein Aufruf an `localhost` geht nicht mehr –
+Edge/WebView2 sperrt seit Version 143 Anfragen von Webseiten ins lokale Netz („Local Network Access“), und
+Add-ins können das nicht freischalten.
+
+**Einrichten (einmalig):**
+1. `tools\Build-Installer.ps1` legt die Dateien unter `artifacts\outlook\` ab. Den Inhalt nach
+   `https://download.brandcompete.com/brandline/outlook/` hochladen (`taskpane.html` muss dort erreichbar sein).
+2. Microsoft 365 Admin Center → **Einstellungen → Integrierte Apps → Benutzerdefinierte Apps hochladen** →
+   Typ „Office-Add-in“, `outlook-addin\manifest.xml` hochladen, Benutzer zuweisen (z. B. ganze Organisation).
+   Bis das Add-in in Outlook erscheint, kann es einige Stunden dauern.
+3. Zum Ausprobieren vorab nur für sich selbst: in Outlook **Add-ins abrufen → Meine Add-ins →
+   Benutzerdefiniertes Add-in hinzufügen → Aus Datei** und `manifest.xml` wählen.
+
+Manifest-Änderungen (Symbole, Texte, URLs): `<Version>` im Manifest erhöhen und erneut hochladen; die `<Id>` nie
+ändern. Änderungen an `taskpane.*` werden nur hochgeladen. Symbole: `tools\New-OutlookIcons.ps1`.
+Test der Nummernerkennung: `node outlook-addin/test/extract.test.js`.
+
 ## Hinweise zur Einrichtung
 
 - **Autostart / tel:-Links** werden beim Start der App für den aktuellen Pfad der `.exe` eingetragen
