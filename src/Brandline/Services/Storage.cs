@@ -25,26 +25,36 @@ public static class Storage
     /// </summary>
     public static AppSettings LoadSettings()
     {
-        if (Load<AppSettings>("settings.json") is { } settings) return settings;
-
-        var defaults = Path.Combine(AppContext.BaseDirectory, "defaults.json");
-        if (File.Exists(defaults))
+        var preset = LoadDefaults();
+        if (Load<AppSettings>("settings.json") is { } settings)
         {
-            try
+            // Bestehende Benutzer: zentral vorgegebene Werte übernehmen, die neu hinzugekommen sind und noch fehlen
+            // (z. B. Microsoft-365-Anbindung nach einem Update) – eigene Eingaben werden nie überschrieben.
+            if (preset != null && settings.M365ClientId.Length == 0 && settings.M365TenantId.Length == 0)
             {
-                var preset = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(defaults), Json);
-                if (preset != null)
-                {
-                    preset.EncryptedPassword = "";
-                    return preset;
-                }
+                settings.M365ClientId = preset.M365ClientId;
+                settings.M365TenantId = preset.M365TenantId;
             }
-            catch (JsonException)
-            {
-                // Fehlerhafte Vorgabedatei ignorieren.
-            }
+            return settings;
         }
-        return new AppSettings();
+        return preset ?? new AppSettings();
+    }
+
+    /// <summary>Vorgaben aus defaults.json im Installationsordner (ohne Zugangsdaten), sonst null.</summary>
+    private static AppSettings? LoadDefaults()
+    {
+        var defaults = Path.Combine(AppContext.BaseDirectory, "defaults.json");
+        if (!File.Exists(defaults)) return null;
+        try
+        {
+            var preset = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(defaults), Json);
+            if (preset != null) preset.EncryptedPassword = "";
+            return preset;
+        }
+        catch (JsonException)
+        {
+            return null; // Fehlerhafte Vorgabedatei ignorieren.
+        }
     }
     public static void SaveSettings(AppSettings settings) => Save("settings.json", settings);
 
