@@ -1,0 +1,73 @@
+<Window x:Class="Brandline.Views.AboutWindow"
+        FontFamily="{DynamicResource AppFont}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Über brandline" Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Text}" FontSize="13">
+    <StackPanel>
+        <!-- Kopf im brandcompete-Stil -->
+        <Border Background="{DynamicResource HeaderBg}" Padding="24,22">
+            <StackPanel>
+                <ContentControl ContentTemplate="{StaticResource Wordmark}" Focusable="False" HorizontalAlignment="Left"/>
+                <TextBlock Text="SIP-Softphone für Windows" Foreground="{DynamicResource HeaderMuted}" Margin="20,6,0,0"/>
+                <TextBlock x:Name="VersionText" Foreground="{DynamicResource HeaderMuted}" FontSize="12" Margin="20,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Margin="24,18,24,20">
+            <TextBlock Text="Entwickelt von" Style="{StaticResource Label}" Margin="0,0,0,2"/>
+            <TextBlock FontSize="17" Foreground="{DynamicResource Heading}">
+                <Run Text="brand" FontWeight="Bold"/><Run Text="compete GmbH"/>
+            </TextBlock>
+            <TextBlock TextWrapping="Wrap" Margin="0,8,0,0"
+                       Text="IT-Beratung und Softwareentwicklung für Cloud-Transformation, datengetriebene Lösungen und intelligente Geschäftsprozesse. Gegründet 2018 in Bad Homburg, mit Standorten in Bad Homburg und Passau."/>
+
+            <Grid Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                </Grid.RowDefinitions>
+                <Grid.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Margin" Value="0,3,14,3"/>
+                        <Setter Property="TextWrapping" Value="Wrap"/>
+                    </Style>
+                </Grid.Resources>
+                <TextBlock Grid.Row="0" Text="Anschrift" Foreground="{DynamicResource Muted}"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="Höhestraße 19, 61348 Bad Homburg v. d. Höhe, Deutschland"/>
+                <TextBlock Grid.Row="1" Text="E-Mail" Foreground="{DynamicResource Muted}"/>
+                <TextBlock Grid.Row="1" Grid.Column="1">
+                    <Hyperlink NavigateUri="mailto:office@brandcompete.com" RequestNavigate="OnLink"
+                               Foreground="{DynamicResource Accent}">office@brandcompete.com</Hyperlink>
+                </TextBlock>
+                <TextBlock Grid.Row="2" Text="Web" Foreground="{DynamicResource Muted}"/>
+                <TextBlock Grid.Row="2" Grid.Column="1">
+                    <Hyperlink NavigateUri="https://www.brandcompete.com" RequestNavigate="OnLink"
+                               Foreground="{DynamicResource Accent}">www.brandcompete.com</Hyperlink>
+                </TextBlock>
+                <TextBlock Grid.Row="3" Text="Register" Foreground="{DynamicResource Muted}"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="Amtsgericht Bad Homburg v. d. Höhe, HRB 13676"/>
+                <TextBlock Grid.Row="4" Text="Geschäftsführung" Foreground="{DynamicResource Muted}"/>
+                <TextBlock Grid.Row="4" Grid.Column="1" Text="Dominique Kraus-Ahma, Dennis Hauser"/>
+            </Grid>
+
+            <Border BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Margin="0,16,0,0" Padding="0,12,0,0">
+                <StackPanel>
+                    <TextBlock Text="Verwendete Open-Source-Komponenten" Style="{StaticResource Label}" Margin="0,0,0,4"/>
+                    <TextBlock Style="{StaticResource Hint}" FontSize="12"
+                               Text="SIPSorcery (SIP/RTP, BSD-3-Clause) · NAudio (Audio, MIT) · .NET / WPF (MIT) · Schrift Rubik (SIL Open Font License 1.1)"/>
+                </StackPanel>
+            </Border>
+
+            <DockPanel Margin="0,18,0,0">
+                <Button DockPanel.Dock="Right" Content="Schließen" IsCancel="True" IsDefault="True"
+                        Style="{StaticResource AccentButton}"/>
+                <TextBlock x:Name="CopyrightText" Foreground="{DynamicResource Muted}" FontSize="12" VerticalAlignment="Center"/>
+            </DockPanel>
+        </StackPanel>
+    </StackPanel>
+</Window>

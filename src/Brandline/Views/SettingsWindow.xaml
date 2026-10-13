@@ -1,0 +1,154 @@
+<Window x:Class="Brandline.Views.SettingsWindow"
+        FontFamily="{DynamicResource AppFont}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Einstellungen – brandline" Width="480" Height="660" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Text}" FontSize="14">
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="16,12">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Abbrechen" IsCancel="True" Margin="0,0,8,0"/>
+                <Button Content="Speichern" IsDefault="True" Style="{StaticResource AccentButton}" Click="OnSave"/>
+            </StackPanel>
+        </Border>
+
+        <TabControl Style="{StaticResource BrandTabs}" Margin="0,6,0,0">
+            <!-- ================= Konto ================= -->
+            <TabItem Header="Konto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20,14,20,14">
+                        <TextBlock Style="{StaticResource Hint}" FontSize="12"
+                                   Text="SIP-Benutzername und -Passwort stehen im Placetel-Portal beim jeweiligen SIP-Benutzer (Format z. B. 777123456789@fpbx.de – so einfügen ist ok)."/>
+                        <TextBlock Text="SIP-Benutzername" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="UserBox"/>
+                        <TextBlock Text="SIP-Passwort" Style="{StaticResource Label}"/>
+                        <PasswordBox x:Name="PasswordBox"/>
+                        <TextBlock x:Name="PasswordHint" Text="Leer lassen, um das gespeicherte Passwort zu behalten."
+                                   Style="{StaticResource Hint}" Margin="0,3,0,0"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Server" Style="{StaticResource Label}"/>
+                                <TextBox x:Name="ServerBox"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <TextBlock Text="Port" Style="{StaticResource Label}"/>
+                                <TextBox x:Name="PortBox"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                                <TextBlock Text="Transport" Style="{StaticResource Label}"/>
+                                <ComboBox x:Name="TransportBox"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Text="Anzeigename (optional)" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="DisplayNameBox"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Audio ================= -->
+            <TabItem Header="Audio">
+                <StackPanel Margin="20,14,20,14">
+                    <TextBlock Text="Klingeln auf" Style="{StaticResource Label}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="RingBox" DisplayMemberPath="Name"/>
+                    <TextBlock Text="Hören (Lautsprecher / Headset)" Style="{StaticResource Label}"/>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="Testen" Click="OnTestSpeaker" Margin="8,0,0,0"/>
+                        <ComboBox x:Name="SpeakerBox" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                    <TextBlock Text="Sprechen (Mikrofon)" Style="{StaticResource Label}"/>
+                    <ComboBox x:Name="MicBox" DisplayMemberPath="Name"/>
+
+                    <CheckBox x:Name="AecBox" Margin="0,20,0,0" Content="Echo- und Rauschunterdrückung"/>
+                    <TextBlock Style="{StaticResource Hint}" Margin="28,2,0,0"
+                               Text="Empfohlen, besonders ohne Headset. Nutzt die in Windows eingebaute Sprachverarbeitung (Windows 10 und 11)."/>
+                </StackPanel>
+            </TabItem>
+
+            <!-- ================= Klingeltöne ================= -->
+            <TabItem Header="Klingeltöne">
+                <DockPanel Margin="20,14,20,14">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="Klingelton bei eingehenden Anrufen" Style="{StaticResource Label}" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="RingtoneBox" DisplayMemberPath="Name" SelectionChanged="OnRingtoneModeChanged"/>
+                        <TextBlock x:Name="RandomHint" Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                   Text="Bei jedem Anruf wird ein Ton aus der Auswahl unten zufällig gespielt (nie zweimal hintereinander derselbe)."/>
+                        <DockPanel Margin="0,16,0,6">
+                            <Button DockPanel.Dock="Right" Content="Eigene Dateien …" Click="OnAddRingtones" Padding="10,4"
+                                    ToolTip="MP3, WAV, WMA, M4A oder AAC – mehrere auf einmal möglich"/>
+                            <TextBlock Text="Auswahl für „Zufällig“" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </StackPanel>
+                    <ListBox x:Name="RingtoneList" HorizontalContentAlignment="Stretch" BorderBrush="{DynamicResource Border}"
+                             BorderThickness="1" Background="{DynamicResource Surface}">
+                        <ListBox.ItemContainerStyle>
+                            <!-- Fluent-Listeneinträge sind recht hoch; hier kompakter -->
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="Padding" Value="8,3"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                                <Setter Property="Margin" Value="2,1"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="2,1">
+                                    <Button DockPanel.Dock="Right" Content="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="12"
+                                            Padding="8,4" Margin="4,0,0,0" ToolTip="Datei entfernen" Click="OnDeleteRingtone"
+                                            Tag="{Binding}" Visibility="{Binding DeleteVisibility}"/>
+                                    <Button DockPanel.Dock="Right" Content="&#xE768;" FontFamily="{StaticResource IconFont}" FontSize="12"
+                                            Padding="8,4" ToolTip="Probehören" Click="OnPreviewRingtone" Tag="{Binding}"/>
+                                    <CheckBox IsChecked="{Binding InPool}" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}"/>
+                                            <TextBlock Text="{Binding Kind}" Foreground="{DynamicResource Muted}" FontSize="12" Margin="8,1,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ================= Allgemein ================= -->
+            <TabItem Header="Allgemein">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20,14,20,14">
+                        <TextBlock Text="Design" Style="{StaticResource SectionTitle}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <RadioButton x:Name="ThemeSystem" GroupName="Theme" Content="Wie Windows" Margin="0,0,20,0" Checked="OnThemePreview"/>
+                            <RadioButton x:Name="ThemeLight" GroupName="Theme" Content="Hell" Margin="0,0,20,0" Checked="OnThemePreview"/>
+                            <RadioButton x:Name="ThemeDark" GroupName="Theme" Content="Dunkel" Checked="OnThemePreview"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Windows" Style="{StaticResource SectionTitle}" Margin="0,22,0,0"/>
+                        <CheckBox x:Name="AutostartBox" Margin="0,8,0,0" Content="Mit Windows starten (im Hintergrund)"/>
+                        <CheckBox x:Name="TelLinksBox" Margin="0,8,0,0" Content="Für tel:/callto:-Links anbieten (Outlook, Browser …)"/>
+                        <Button Content="Windows-Standard-Apps öffnen …" Click="OnOpenDefaultApps" HorizontalAlignment="Left"
+                                Margin="28,6,0,0" Padding="10,3" FontSize="12"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="28,4,0,0"
+                                   Text="Dort bei „TEL“ und „CALLTO“ einmalig brandline auswählen."/>
+
+                        <TextBlock Text="Tastenkürzel: markierte Nummer wählen" Style="{StaticResource Label}" Margin="0,16,0,4"/>
+                        <TextBox x:Name="HotkeyBox" PreviewKeyDown="OnHotkeyKeyDown"
+                                 ToolTip="Hier klicken und die gewünschte Tastenkombination drücken, Entf = aus"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,3,0,0"
+                                   Text="In Outlook, Browser usw. Nummer markieren und Kürzel drücken. Entf = deaktivieren."/>
+
+                        <TextBlock Text="Netzwerk" Style="{StaticResource SectionTitle}" Margin="0,22,0,0"/>
+                        <CheckBox x:Name="StunBox" Margin="0,8,0,0" Content="Öffentliche IP per STUN ermitteln"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="28,2,0,0"
+                                   Text="Nur einschalten, wenn der Ton bei Gesprächen nur in eine Richtung läuft."/>
+                        <TextBox x:Name="StunServerBox" Margin="28,6,0,0"/>
+                        <CheckBox x:Name="SipLogBox" Margin="0,14,0,0" Content="SIP-Protokoll schreiben (zur Fehlersuche)"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

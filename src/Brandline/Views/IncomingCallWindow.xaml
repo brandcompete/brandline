@@ -1,0 +1,65 @@
+<Window x:Class="Brandline.Views.IncomingCallWindow"
+        FontFamily="{DynamicResource AppFont}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:Brandline.Views"
+        Title="Eingehender Anruf" Width="360" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False" WindowStartupLocation="Manual">
+    <!-- Bewusst immer dunkel (wie der Kopfbereich von brandcompete.com), damit der Hinweis auffällt -->
+    <Border CornerRadius="14" BorderThickness="2" Margin="12" Background="{DynamicResource HeaderBg}">
+        <Border.BorderBrush>
+            <!-- Eigene Instanz, da geteilte Ressourcen eingefroren sind und nicht animiert werden können -->
+            <SolidColorBrush Color="#A91212"/>
+        </Border.BorderBrush>
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="22" ShadowDepth="3" Opacity="0.45"/>
+        </Border.Effect>
+        <Border.Triggers>
+            <EventTrigger RoutedEvent="Loaded">
+                <BeginStoryboard>
+                    <!-- Pulsierender Rahmen als visuelles Klingeln -->
+                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                        <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                        From="#A91212" To="#FF6B6B" Duration="0:0:0.6"/>
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Border.Triggers>
+        <StackPanel Margin="18,14,14,16">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource HeaderIconButton}" Content="&#xE711;" FontSize="12"
+                        Width="28" Height="28" ToolTip="Hinweis ausblenden (Anruf klingelt weiter)" Click="OnDismiss"/>
+                <Button DockPanel.Dock="Right" x:Name="SilenceButton" Style="{StaticResource HeaderIconButton}" Content="&#xE7ED;"
+                        FontSize="13" Width="28" Height="28" ToolTip="Klingelton stumm" Click="OnSilence"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="9" Height="9" CornerRadius="2" Background="#A91212" Margin="0,1,7,0"/>
+                    <TextBlock Foreground="{DynamicResource HeaderMuted}" FontSize="12">
+                        <Run Text="brand" FontWeight="Bold"/><Run Text="line · Eingehender Anruf"/>
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+            <DockPanel Margin="0,12,0,0">
+                <v:AvatarView x:Name="Avatar" Diameter="54" Margin="0,0,14,0"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="NameText" FontSize="20" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="DetailText" FontSize="13" Foreground="{DynamicResource HeaderMuted}" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </DockPanel>
+            <UniformGrid Columns="2" Margin="0,16,0,0">
+                <Button Style="{StaticResource GreenButton}" Margin="0,0,5,0" Padding="0,9" Click="OnAnswer">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" Margin="0,2,8,0"/>
+                        <TextBlock Text="Annehmen"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource RedButton}" Margin="5,0,0,0" Padding="0,9" Click="OnReject">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE778;" FontFamily="{StaticResource IconFont}" Margin="0,2,8,0"/>
+                        <TextBlock Text="Ablehnen"/>
+                    </StackPanel>
+                </Button>
+            </UniformGrid>
+        </StackPanel>
+    </Border>
+</Window>

@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- brandline – dunkles Farbschema (Anthrazit #1A1A2E mit dunklem Rot, wie brandcompete.com) -->
+
+    <SolidColorBrush x:Key="Bg" Color="#14141F"/>
+    <SolidColorBrush x:Key="Surface" Color="#1C1C2B"/>
+    <SolidColorBrush x:Key="SurfaceAlt" Color="#24243A"/>
+    <SolidColorBrush x:Key="Border" Color="#33334A"/>
+    <SolidColorBrush x:Key="Text" Color="#D6D6E0"/>
+    <SolidColorBrush x:Key="Heading" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Muted" Color="#9C9CB0"/>
+
+    <SolidColorBrush x:Key="Accent" Color="#C41515"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#A91212"/>
+    <SolidColorBrush x:Key="AccentSoft" Color="#2D1515"/>
+    <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Teal" Color="#3FA3C8"/>
+    <SolidColorBrush x:Key="Green" Color="#1F8A42"/>
+    <SolidColorBrush x:Key="Red" Color="#C41515"/>
+    <SolidColorBrush x:Key="Highlight" Color="#B8901F"/>
+
+    <SolidColorBrush x:Key="KeyBg" Color="#1E1E30"/>
+    <SolidColorBrush x:Key="KeyHover" Color="#2D1515"/>
+    <SolidColorBrush x:Key="Selection" Color="#3A1A1E"/>
+
+    <LinearGradientBrush x:Key="HeaderBg" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#101019" Offset="0"/>
+        <GradientStop Color="#1A1422" Offset="0.55"/>
+        <GradientStop Color="#3A1416" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="HeaderText" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="HeaderMuted" Color="#B3FFFFFF"/>
+    <SolidColorBrush x:Key="HeaderLine" Color="#33FFFFFF"/>
+</ResourceDictionary>

@@ -1,0 +1,194 @@
+<Window x:Class="Brandline.Views.MainWindow"
+        FontFamily="{DynamicResource AppFont}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:Brandline.Views"
+        Title="brandline" Width="420" Height="680" MinWidth="380" MinHeight="600"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource Bg}" Foreground="{DynamicResource Text}"
+        FontSize="14">
+    <DockPanel>
+        <!-- Kopfzeile im Stil von brandcompete.com: Anthrazit mit rotem Schimmer -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource HeaderBg}" Padding="16,12,10,12">
+            <StackPanel>
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <ToggleButton x:Name="DndToggle" Style="{StaticResource HeaderIconButton}" Content="&#xE708;"
+                                      Click="OnDndClick"
+                                      ToolTip="Nicht stören – eingehende Anrufe werden abgewiesen (z. B. zur Mailbox)"/>
+                        <Button Style="{StaticResource HeaderIconButton}" Content="&#xE713;" Click="OnSettings" ToolTip="Einstellungen"/>
+                        <Button Style="{StaticResource HeaderIconButton}" Content="&#xE946;" Click="OnAbout" ToolTip="Über brandline"/>
+                    </StackPanel>
+                    <ContentControl ContentTemplate="{StaticResource Wordmark}" Focusable="False"/>
+                </DockPanel>
+                <StackPanel Orientation="Horizontal" Margin="1,8,0,0">
+                    <Ellipse x:Name="RegDot" Width="8" Height="8" Fill="Gray" Margin="0,1,8,0"/>
+                    <TextBlock x:Name="RegText" Text="Nicht angemeldet" Foreground="{DynamicResource HeaderMuted}"
+                               FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Statuszeile -->
+        <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="16,7">
+            <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+        </Border>
+
+        <!-- Gesprächsbereich: nur sichtbar, wenn ein Anruf läuft -->
+        <Border x:Name="CallPanel" DockPanel.Dock="Top" Visibility="Collapsed" Background="{DynamicResource AccentSoft}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="16,14">
+            <StackPanel>
+                <DockPanel>
+                    <v:AvatarView x:Name="CallAvatar" Diameter="52" Margin="0,0,14,0" DockPanel.Dock="Left" VerticalAlignment="Top"/>
+                    <StackPanel>
+                        <TextBlock x:Name="CallStateText" Foreground="{DynamicResource Muted}" FontSize="12"/>
+                        <TextBlock x:Name="CallName" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="CallNumber" FontSize="14" Foreground="{DynamicResource Muted}"/>
+                        <TextBlock x:Name="CallTimer" FontSize="13" Margin="0,2,0,0" Foreground="{DynamicResource Heading}"/>
+                    </StackPanel>
+                </DockPanel>
+                <TextBlock x:Name="QualityText" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"/>
+                <WrapPanel Margin="0,10,0,0">
+                    <Button x:Name="AnswerButton" Content="Annehmen" Style="{StaticResource GreenButton}"
+                            Click="OnAnswer" Margin="0,0,8,0" MinWidth="100"/>
+                    <Button x:Name="HangupButton" Content="Auflegen" Style="{StaticResource RedButton}"
+                            Click="OnHangup" Margin="0,0,8,0" MinWidth="100"/>
+                    <Button x:Name="MuteButton" Content="Stumm" Click="OnMute" Margin="0,0,8,0"/>
+                    <Button x:Name="HoldButton" Content="Halten" Click="OnHold"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <TabControl x:Name="Tabs" Style="{StaticResource BrandTabs}" SelectionChanged="OnTabChanged">
+            <TabItem Header="Telefon">
+                <Grid Margin="16,14,16,14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="&#xE72C;" FontFamily="{StaticResource IconFont}" Click="OnRedial"
+                                FontSize="15" Margin="6,0,0,0" Padding="12,0" ToolTip="Wahlwiederholung (letzte gewählte Nummer)"/>
+                        <Button DockPanel.Dock="Right" Content="&#xE750;" FontFamily="{StaticResource IconFont}" Click="OnBackspace"
+                                FontSize="15" Margin="6,0,0,0" Padding="12,0" ToolTip="Letzte Ziffer löschen"/>
+                        <TextBox x:Name="NumberBox" FontSize="22" PreviewKeyDown="OnNumberKeyDown"
+                                 TextChanged="OnNumberChanged" ToolTip="Nummer oder Name eingeben, Enter wählt"/>
+                    </DockPanel>
+                    <TextBlock x:Name="NumberHint" Grid.Row="1" Foreground="{DynamicResource Muted}" FontSize="12"
+                               Margin="2,4,0,0" Height="18"/>
+                    <UniformGrid x:Name="DialPad" Grid.Row="2" Columns="3" Rows="4" Margin="18,6"/>
+                    <!-- Vorschläge aus Adressbuch und Anrufliste, über dem Nummernfeld -->
+                    <ListBox x:Name="SuggestionList" Grid.Row="2" VerticalAlignment="Top" MaxHeight="240"
+                             Panel.ZIndex="1" Visibility="Collapsed" Background="{DynamicResource Bg}"
+                             BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                             MouseUp="OnSuggestionClick" PreviewKeyDown="OnSuggestionKeyDown">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="2,3">
+                                    <v:AvatarView DisplayName="{Binding Name}" Image="{Binding Image}" Diameter="30" Margin="0,0,10,0"/>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"/>
+                                        <TextBlock Text="{Binding Number}" Foreground="{DynamicResource Muted}" FontSize="12"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button x:Name="CallButton" Grid.Row="3" Style="{StaticResource GreenButton}"
+                            FontSize="16" Padding="0,11" Margin="22,4,22,0" Click="OnCall">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0"/>
+                            <TextBlock Text="Anrufen"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </TabItem>
+
+            <TabItem x:Name="CallsTab">
+                <TabItem.Header>
+                    <TextBlock x:Name="CallsTabHeader" Text="Anrufliste"/>
+                </TabItem.Header>
+                <DockPanel Margin="12">
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Content="Zurückrufen" Style="{StaticResource GreenButton}" Click="OnCallBack" Margin="0,0,6,0"/>
+                        <Button Content="Ins Adressbuch" Click="OnHistoryToContact" Margin="0,0,6,0"/>
+                        <Button Content="Löschen" Click="OnDeleteHistory" Margin="0,0,6,0"/>
+                        <Button Content="Liste leeren" Click="OnClearHistory"/>
+                    </WrapPanel>
+                    <ListBox x:Name="CallList" HorizontalContentAlignment="Stretch" BorderThickness="0"
+                             Background="Transparent" MouseDoubleClick="OnCallListDoubleClick">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="Sym" Text="{Binding Symbol}" FontSize="16" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Muted}"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock x:Name="Who" Text="{Binding Display}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Heading}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock FontSize="12" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Description, Mode=OneWay}"/>
+                                            <Run Text="  "/>
+                                            <Run Text="{Binding Number, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" Margin="8,0,0,0">
+                                        <TextBlock Text="{Binding When}" FontSize="12" HorizontalAlignment="Right"/>
+                                        <TextBlock Text="{Binding DurationText}" FontSize="12" Foreground="{DynamicResource Muted}"
+                                                   HorizontalAlignment="Right"/>
+                                    </StackPanel>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Outcome}" Value="Missed">
+                                        <Setter TargetName="Sym" Property="Foreground" Value="{DynamicResource Accent}"/>
+                                        <Setter TargetName="Who" Property="Foreground" Value="{DynamicResource Accent}"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Adressbuch">
+                <DockPanel Margin="12">
+                    <TextBox x:Name="SearchBox" DockPanel.Dock="Top" TextChanged="OnSearchChanged"
+                             ToolTip="Name, Firma oder Nummer suchen"/>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Content="Anrufen" Style="{StaticResource GreenButton}" Click="OnCallContact" Margin="0,0,6,0"/>
+                        <Button Content="Neu" Click="OnNewContact" Margin="0,0,6,0"/>
+                        <Button Content="Bearbeiten" Click="OnEditContact" Margin="0,0,6,0"/>
+                        <Button Content="Löschen" Click="OnDeleteContact"/>
+                    </WrapPanel>
+                    <ListBox x:Name="ContactList" Margin="0,8,0,0" MouseDoubleClick="OnContactDoubleClick"
+                             HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="2,4">
+                                    <v:AvatarView DisplayName="{Binding Name}" Image="{Binding AvatarImage}" Diameter="38" Margin="0,0,12,0"/>
+                                    <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding TypeIcon}" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource Muted}"
+                                                   Margin="0,2,6,0" ToolTip="{Binding TypeLabel}"/>
+                                        <TextBlock Text="{Binding Number}" Foreground="{DynamicResource Text}"/>
+                                    </StackPanel>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource Muted}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

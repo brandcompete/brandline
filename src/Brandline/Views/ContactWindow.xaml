@@ -1,0 +1,50 @@
+<Window x:Class="Brandline.Views.ContactWindow"
+        FontFamily="{DynamicResource AppFont}"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:Brandline.Views"
+        Title="Kontakt" Width="400" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Text}" FontSize="14">
+    <StackPanel Margin="20">
+        <!-- Avatar -->
+        <DockPanel>
+            <v:AvatarView x:Name="AvatarPreview" Diameter="72" Margin="0,0,16,0"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="Avatar" Style="{StaticResource SectionTitle}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="Bild wählen …" Click="OnChooseAvatar" Padding="12,5" Margin="0,0,8,0"/>
+                    <Button x:Name="RemoveAvatarButton" Content="Entfernen" Click="OnRemoveAvatar" Padding="12,5"/>
+                </StackPanel>
+                <TextBlock Text="JPG, PNG oder BMP – wird quadratisch zugeschnitten." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+            </StackPanel>
+        </DockPanel>
+
+        <TextBlock Text="Name" Style="{StaticResource Label}" Margin="0,18,0,4"/>
+        <TextBox x:Name="NameBox" TextChanged="OnNameChanged"/>
+        <TextBlock Text="Firma" Style="{StaticResource Label}"/>
+        <TextBox x:Name="CompanyBox"/>
+        <TextBlock Text="Telefonnummer" Style="{StaticResource Label}"/>
+        <TextBox x:Name="NumberBox"/>
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <RadioButton x:Name="MobileRadio" GroupName="Type" IsChecked="True" Margin="0,0,24,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8EA;" FontFamily="{StaticResource IconFont}" Margin="0,2,6,0"/>
+                    <TextBlock Text="Mobil"/>
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="LandlineRadio" GroupName="Type">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" Margin="0,2,6,0"/>
+                    <TextBlock Text="Festnetz"/>
+                </StackPanel>
+            </RadioButton>
+        </StackPanel>
+        <TextBlock Text="Notiz" Style="{StaticResource Label}"/>
+        <TextBox x:Name="NoteBox" Height="64" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Abbrechen" IsCancel="True" Margin="0,0,8,0"/>
+            <Button Content="Speichern" IsDefault="True" Style="{StaticResource AccentButton}" Click="OnSave"/>
+        </StackPanel>
+    </StackPanel>
+</Window>
