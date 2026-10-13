@@ -6,7 +6,10 @@ namespace Brandline.Models;
 public enum SipTransportKind
 {
     Udp,
-    Tcp
+    Tcp,
+
+    /// <summary>Verschlüsselt: SIP über TLS (Placetel: Port 5061), Sprache per SRTP.</summary>
+    Tls
 }
 
 public enum AppTheme
@@ -26,8 +29,8 @@ public sealed class AppSettings
     public string EncryptedPassword { get; set; } = "";
 
     public string Server { get; set; } = "fpbx.de";
-    public int Port { get; set; } = 5060;
-    public SipTransportKind Transport { get; set; } = SipTransportKind.Udp;
+    public int Port { get; set; } = 5061;
+    public SipTransportKind Transport { get; set; } = SipTransportKind.Tls;
     public string DisplayName { get; set; } = "";
     public int RegisterExpirySeconds { get; set; } = 300;
 

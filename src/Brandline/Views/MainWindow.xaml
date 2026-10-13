@@ -22,6 +22,9 @@
                 </DockPanel>
                 <StackPanel Orientation="Horizontal" Margin="1,8,0,0">
                     <Ellipse x:Name="RegDot" Width="8" Height="8" Fill="Gray" Margin="0,1,8,0"/>
+                    <TextBlock x:Name="LockIcon" Text="&#xE72E;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                               Foreground="{DynamicResource HeaderMuted}" Margin="0,1,6,0" Visibility="Collapsed"
+                               ToolTip="Verschlüsselt: Anmeldung per TLS, Sprache per SRTP"/>
                     <TextBlock x:Name="RegText" Text="Nicht angemeldet" Foreground="{DynamicResource HeaderMuted}"
                                FontSize="12" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
                 </StackPanel>

@@ -1,7 +1,7 @@
 {
   "Server": "fpbx.de",
-  "Port": 5060,
-  "Transport": "Udp",
+  "Port": 5061,
+  "Transport": "Tls",
   "RegisterExpirySeconds": 300,
   "KeepAliveSeconds": 25,
   "EchoCancellation": true,

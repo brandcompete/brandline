@@ -29,8 +29,8 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="90"/>
-                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="170"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Server" Style="{StaticResource Label}"/>
@@ -42,7 +42,7 @@
                             </StackPanel>
                             <StackPanel Grid.Column="2" Margin="8,0,0,0">
                                 <TextBlock Text="Transport" Style="{StaticResource Label}"/>
-                                <ComboBox x:Name="TransportBox"/>
+                                <ComboBox x:Name="TransportBox" DisplayMemberPath="Label" SelectionChanged="OnTransportChanged"/>
                             </StackPanel>
                         </Grid>
                         <TextBlock Text="Anzeigename (optional)" Style="{StaticResource Label}"/>

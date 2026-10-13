@@ -312,7 +312,8 @@ public partial class MainWindow : Window
         CallTimer.Text = (DateTime.Now - _connectedAt).ToString(@"hh\:mm\:ss");
         if (_phone.Quality is { } q)
         {
-            QualityText.Text = $"Jitter {q.JitterMs:0} ms · Verlust {q.LossPercent:0.0} % · Puffer {q.BufferMs} ms · " +
+            QualityText.Text = (q.Encrypted ? "Verschlüsselt (SRTP) · " : "Unverschlüsselt · ") +
+                               $"Jitter {q.JitterMs:0} ms · Verlust {q.LossPercent:0.0} % · Puffer {q.BufferMs} ms · " +
                                (q.EchoCancellation ? "Echounterdrückung an" : "Echounterdrückung aus");
             QualityText.SetResourceReference(TextBlock.ForegroundProperty, q.LossPercent > 5 || q.JitterMs > 60 ? "Accent" : "Muted");
         }
@@ -326,6 +327,7 @@ public partial class MainWindow : Window
         _registrationText = text;
         RegText.Text = text;
         RegText.ToolTip = text;
+        LockIcon.Visibility = state == RegistrationState.Registered && _phone.IsEncrypted ? Visibility.Visible : Visibility.Collapsed;
         RegDot.Fill = new SolidColorBrush(state switch
         {
             RegistrationState.Registered => Color.FromRgb(0x22, 0xA4, 0x47),

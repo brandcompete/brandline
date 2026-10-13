@@ -1,6 +1,8 @@
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Brandline.Models;
 using Brandline.Services.Audio;
@@ -32,7 +34,7 @@ public enum CallState
 
 public sealed record CallParty(string Number, string DisplayName);
 
-public sealed record CallQuality(double JitterMs, double LossPercent, int BufferMs, bool EchoCancellation);
+public sealed record CallQuality(double JitterMs, double LossPercent, int BufferMs, bool EchoCancellation, bool Encrypted);
 
 /// <summary>
 /// Kapselt SIP-Registrierung und genau einen Anruf gleichzeitig. Hält die Verbindung zum Server
@@ -52,7 +54,7 @@ public sealed class SipPhone : IAsyncDisposable
 
     private AppSettings _settings = new();
     private SIPTransport? _transport;
-    private SIPUDPChannel? _udpChannel;
+    private SIPChannel? _signalingChannel;
     private SIPEndPoint? _serverEndPoint;
     private SIPRegistrationUserAgent? _registration;
     private IPAddress? _publicIp;
@@ -93,8 +95,14 @@ public sealed class SipPhone : IAsyncDisposable
     public bool DoNotDisturb { get; set; }
     public IPAddress? PublicIp => _publicIp;
 
+    /// <summary>Signalisierung per TLS und Sprache per SRTP.</summary>
+    public bool IsEncrypted => _settings.Transport == SipTransportKind.Tls;
+
+    /// <summary>Nur für automatisierte Tests mit selbstsignierten Zertifikaten – in der App immer null.</summary>
+    public static RemoteCertificateValidationCallback? CertificateValidationOverride { get; set; }
+
     public CallQuality? Quality => _audio is { } a && State == CallState.Connected
-        ? new CallQuality(a.JitterMs, a.LossPercent, a.BufferDelayMs, a.EchoCancellationActive)
+        ? new CallQuality(a.JitterMs, a.LossPercent, a.BufferDelayMs, a.EchoCancellationActive, _media?.IsSecureContextReady() == true)
         : null;
 
     // ---------------- Registrierung ----------------
@@ -115,10 +123,14 @@ public sealed class SipPhone : IAsyncDisposable
             }
 
             var transport = new SIPTransport();
-            _udpChannel = new SIPUDPChannel(new IPEndPoint(IPAddress.Any, 0));
-            transport.AddSIPChannel(_udpChannel);
-            if (settings.Transport == SipTransportKind.Tcp)
-                transport.AddSIPChannel(new SIPTCPChannel(new IPEndPoint(IPAddress.Any, 0)));
+            _signalingChannel = settings.Transport switch
+            {
+                // TLS: Serverzertifikat streng gegen den Windows-Zertifikatsspeicher prüfen.
+                SipTransportKind.Tls => new SIPTLSChannel(new IPEndPoint(IPAddress.Any, 0), false, ValidateServerCertificate),
+                SipTransportKind.Tcp => new SIPTCPChannel(new IPEndPoint(IPAddress.Any, 0)),
+                _ => new SIPUDPChannel(new IPEndPoint(IPAddress.Any, 0)),
+            };
+            transport.AddSIPChannel(_signalingChannel);
             transport.SIPTransportRequestReceived += OnTransportRequest;
             if (settings.EnableSipLog) AttachSipLog(transport);
             _transport = transport;
@@ -129,7 +141,8 @@ public sealed class SipPhone : IAsyncDisposable
                 transport, settings.SipUser, settings.Password, RegistrarHost(), settings.RegisterExpirySeconds,
                 sendUsernameInContactHeader: true);
             registration.RegistrationSuccessful += (_, _) =>
-                RegistrationChanged?.Invoke(RegistrationState.Registered, $"Angemeldet als {settings.SipUser}");
+                RegistrationChanged?.Invoke(RegistrationState.Registered,
+                    $"Angemeldet als {settings.SipUser}" + (IsEncrypted ? " · verschlüsselt" : ""));
             registration.RegistrationTemporaryFailure += (_, response, message) =>
                 RegistrationChanged?.Invoke(RegistrationState.Failed, DescribeRegistrationError(response, message) + " – neuer Versuch läuft …");
             registration.RegistrationFailed += (_, response, message) =>
@@ -139,7 +152,8 @@ public sealed class SipPhone : IAsyncDisposable
             RegistrationChanged?.Invoke(RegistrationState.Registering, $"Verbinde mit {settings.Server} …");
             registration.Start();
 
-            if (settings.Transport == SipTransportKind.Udp && settings.KeepAliveSeconds > 0)
+            // Keepalive auch bei TCP/TLS: hält die Verbindung im Router offen, über die Placetel Anrufe zustellt.
+            if (settings.KeepAliveSeconds > 0)
             {
                 var period = TimeSpan.FromSeconds(settings.KeepAliveSeconds);
                 _keepAliveTimer = new Timer(_ => _ = SendKeepAliveAsync(), null, period, period);
@@ -176,7 +190,7 @@ public sealed class SipPhone : IAsyncDisposable
         var transport = _transport;
         _registration = null;
         _transport = null;
-        _udpChannel = null;
+        _signalingChannel = null;
         _serverEndPoint = null;
         _publicIp = null;
 
@@ -197,10 +211,30 @@ public sealed class SipPhone : IAsyncDisposable
         RegistrationChanged?.Invoke(RegistrationState.Offline, "Nicht angemeldet");
     }
 
-    private string RegistrarHost()
+    private string RegistrarHost() => _settings.Transport switch
     {
-        var host = _settings.Port == 5060 ? _settings.Server : $"{_settings.Server}:{_settings.Port}";
-        return _settings.Transport == SipTransportKind.Tcp ? host + ";transport=tcp" : host;
+        // Bei TLS Port immer angeben (Placetel: 5061).
+        SipTransportKind.Tls => $"{_settings.Server}:{_settings.Port};transport=tls",
+        SipTransportKind.Tcp => (_settings.Port == 5060 ? _settings.Server : $"{_settings.Server}:{_settings.Port}") + ";transport=tcp",
+        _ => _settings.Port == 5060 ? _settings.Server : $"{_settings.Server}:{_settings.Port}",
+    };
+
+    private bool ValidateServerCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
+    {
+        if (CertificateValidationOverride != null) return CertificateValidationOverride(sender, certificate, chain, errors);
+        if (errors == SslPolicyErrors.None) return true;
+
+        // Verbindung ablehnen – sonst könnte sich jemand im Netz als Placetel ausgeben.
+        var detail = errors switch
+        {
+            SslPolicyErrors.RemoteCertificateNameMismatch => "ausgestellt für einen anderen Servernamen",
+            SslPolicyErrors.RemoteCertificateChainErrors => "nicht vertrauenswürdig oder abgelaufen",
+            SslPolicyErrors.RemoteCertificateNotAvailable => "kein Zertifikat erhalten",
+            _ => errors.ToString()
+        };
+        Error?.Invoke($"Sicherheitszertifikat von {_settings.Server} abgelehnt ({detail}) – keine Verbindung.");
+        LogLine($"TLS: Zertifikat abgelehnt ({errors}) – {certificate?.Subject}");
+        return false;
     }
 
     private static string DescribeRegistrationError(SIPResponse? response, string? message)
@@ -225,7 +259,7 @@ public sealed class SipPhone : IAsyncDisposable
         try
         {
             var transport = _transport;
-            var channel = _udpChannel;
+            var channel = _signalingChannel;
             if (transport == null || channel == null) return;
 
             _serverEndPoint ??= await transport.ResolveSIPUriAsync(SIPURI.ParseSIPURIRelaxed("sip:" + RegistrarHost()));
@@ -580,7 +614,13 @@ public sealed class SipPhone : IAsyncDisposable
         audio.OnAudioSinkError += msg => Error?.Invoke(msg);
         audio.Warning += msg => Info?.Invoke(msg);
 
-        var media = new PhoneMediaSession(new MediaEndPoints { AudioSource = audio, AudioSink = audio }, () => _publicIp)
+        var config = new VoIPMediaSessionConfig
+        {
+            MediaEndPoint = new MediaEndPoints { AudioSource = audio, AudioSink = audio },
+            // SRTP nur zusammen mit TLS: der Schlüssel steht im SDP und wäre sonst mitlesbar.
+            RtpSecureMediaOption = IsEncrypted ? RtpSecureMediaOptionEnum.SdpCryptoNegotiation : RtpSecureMediaOptionEnum.None,
+        };
+        var media = new PhoneMediaSession(config, () => _publicIp)
         {
             // Hinter NAT kommt RTP oft von einer anderen Adresse als im SDP angegeben.
             AcceptRtpFromAny = true
@@ -661,6 +701,7 @@ public sealed class SipPhone : IAsyncDisposable
 
         var writer = new StreamWriter(path, append: true) { AutoFlush = true };
         _sipLog = writer;
+        writer.WriteLine($"=== {DateTime.Now:yyyy-MM-dd HH:mm:ss} Start, Transport {_settings.Transport}, Server {RegistrarHost()}");
 
         void Write(string direction, SIPEndPoint local, SIPEndPoint remote, object message)
         {
@@ -687,8 +728,14 @@ public sealed class SipPhone : IAsyncDisposable
     }
 
     /// <summary>Setzt bei Bedarf die per STUN ermittelte öffentliche IP ins SDP ein.</summary>
-    private sealed class PhoneMediaSession(MediaEndPoints endPoints, Func<IPAddress?> publicIp)
-        : VoIPMediaSession(endPoints, null)
+    private void LogLine(string text)
+    {
+        var writer = _sipLog;
+        if (writer != null) lock (writer) writer.WriteLine($"--- {DateTime.Now:HH:mm:ss.fff} {text}");
+    }
+
+    private sealed class PhoneMediaSession(VoIPMediaSessionConfig config, Func<IPAddress?> publicIp)
+        : VoIPMediaSession(config)
     {
         public override SDP CreateOffer(IPAddress connectionAddress) =>
             base.CreateOffer(connectionAddress ?? publicIp()!);

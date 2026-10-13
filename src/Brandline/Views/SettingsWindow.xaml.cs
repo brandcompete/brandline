@@ -39,8 +39,8 @@ public partial class SettingsWindow : Window
         ServerBox.Text = settings.Server;
         PortBox.Text = settings.Port.ToString();
         DisplayNameBox.Text = settings.DisplayName;
-        TransportBox.ItemsSource = Enum.GetValues<SipTransportKind>();
-        TransportBox.SelectedItem = settings.Transport;
+        TransportBox.ItemsSource = TransportChoices;
+        TransportBox.SelectedItem = TransportChoices.First(t => t.Kind == settings.Transport);
         PasswordHint.Visibility = string.IsNullOrEmpty(settings.EncryptedPassword) ? Visibility.Collapsed : Visibility.Visible;
 
         Fill(RingBox, AudioDevices.Outputs(), DataFlow.Render, settings.RingDevice);
@@ -70,6 +70,24 @@ public partial class SettingsWindow : Window
     }
 
     public AppSettings Settings { get; private set; } = new();
+
+    public sealed record TransportChoice(SipTransportKind Kind, string Label, int DefaultPort);
+
+    private static readonly TransportChoice[] TransportChoices =
+    [
+        new(SipTransportKind.Tls, "TLS – verschlüsselt (empfohlen)", 5061),
+        new(SipTransportKind.Udp, "UDP", 5060),
+        new(SipTransportKind.Tcp, "TCP", 5060),
+    ];
+
+    /// <summary>Port mitziehen, solange er noch auf dem Standardwert der vorherigen Auswahl steht.</summary>
+    private void OnTransportChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || TransportBox.SelectedItem is not TransportChoice now) return;
+        var before = e.RemovedItems.OfType<TransportChoice>().FirstOrDefault();
+        if (before != null && PortBox.Text.Trim() == before.DefaultPort.ToString())
+            PortBox.Text = now.DefaultPort.ToString();
+    }
 
     private static void Fill(ComboBox box, List<AudioDevice> devices, DataFlow flow, string stored)
     {
@@ -234,7 +252,7 @@ public partial class SettingsWindow : Window
         s.SipUser = user;
         s.Server = server;
         s.Port = port;
-        s.Transport = TransportBox.SelectedItem is SipTransportKind t ? t : SipTransportKind.Udp;
+        s.Transport = (TransportBox.SelectedItem as TransportChoice)?.Kind ?? SipTransportKind.Udp;
         s.DisplayName = DisplayNameBox.Text.Trim();
         s.RingDevice = Selected(RingBox);
         s.RingTone = SelectedRingtone;
