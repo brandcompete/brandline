@@ -29,8 +29,8 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="80"/>
-                                <ColumnDefinition Width="170"/>
+                                <ColumnDefinition Width="72"/>
+                                <ColumnDefinition Width="200"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Text="Server" Style="{StaticResource Label}"/>

@@ -1,11 +1,12 @@
 # brandline
 
-SIP-Softphone der brandcompete GmbH für Windows 10/11 (WPF, .NET 9), vorkonfiguriert für Placetel.
+SIP-Softphone der brandcompete GmbH für Windows 10/11 (WPF, .NET 10), vorkonfiguriert für Placetel.
 
 ## Funktionen
 
 **Telefonieren**
-- Anmeldung am SIP-Server (UDP oder TCP), Standard: `fpbx.de:5060`
+- Anmeldung am SIP-Server, Standard **verschlüsselt**: SIP über **TLS** (`fpbx.de:5061`) und Sprache per **SRTP**;
+  Serverzertifikat wird streng geprüft. UDP/TCP (5060, unverschlüsselt) weiterhin wählbar
 - Anrufen über Nummernfeld, Tastatur (Enter), Adressbuch, Anrufliste oder Wahlwiederholung
 - Vorschläge beim Tippen (Name, Firma oder Teil der Nummer) aus Adressbuch und Anrufliste
 - Eingehende Anrufe: Benachrichtigungsfenster unten rechts mit Name/Nummer, Annehmen/Ablehnen, Klingelton stumm
@@ -21,7 +22,7 @@ SIP-Softphone der brandcompete GmbH für Windows 10/11 (WPF, .NET 9), vorkonfigu
 - brandcompete-Design: Markenrot `#A91212`, Anthrazit `#1A1A2E`, Wortmarke „■ **brand**line“,
   Hausschrift **Rubik** eingebettet (SIL Open Font License, `src/Brandline/Fonts/OFL-Rubik.txt`)
 - **Hell**, **Dunkel** oder **wie Windows** (folgt der Windows-Einstellung auch im laufenden Betrieb)
-- Fluent-Design von .NET 9 für alle Standard-Steuerelemente; deren Windows-Akzentfarbe wird automatisch
+- Fluent-Design von .NET für alle Standard-Steuerelemente; deren Windows-Akzentfarbe wird automatisch
   durch Markenrot ersetzt
 - „Über brandline“ mit Angaben zur brandcompete GmbH
 
@@ -49,7 +50,7 @@ SIP-Softphone der brandcompete GmbH für Windows 10/11 (WPF, .NET 9), vorkonfigu
 dotnet run --project src/Brandline
 ```
 
-Eine einzelne `.exe` erzeugen (benötigt die .NET 9 Desktop Runtime):
+Eine einzelne `.exe` erzeugen (benötigt die .NET 10 Desktop Runtime; für die Verteilung besser den Installer nutzen):
 
 ```bash
 dotnet publish src/Brandline/Brandline.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish

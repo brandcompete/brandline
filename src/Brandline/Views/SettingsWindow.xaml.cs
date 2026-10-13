@@ -75,7 +75,7 @@ public partial class SettingsWindow : Window
 
     private static readonly TransportChoice[] TransportChoices =
     [
-        new(SipTransportKind.Tls, "TLS – verschlüsselt (empfohlen)", 5061),
+        new(SipTransportKind.Tls, "TLS (verschlüsselt)", 5061),
         new(SipTransportKind.Udp, "UDP", 5060),
         new(SipTransportKind.Tcp, "TCP", 5060),
     ];

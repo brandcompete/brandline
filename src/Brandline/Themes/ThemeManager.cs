@@ -6,7 +6,7 @@ using Microsoft.Win32;
 namespace Brandline.Themes;
 
 /// <summary>
-/// Schaltet zwischen hellem und dunklem Design um. Grundlage ist das Fluent-Design von .NET 9
+/// Schaltet zwischen hellem und dunklem Design um. Grundlage ist das Fluent-Design von .NET
 /// (Application.ThemeMode) für die Standardsteuerelemente; darüber liegen die brandline-Paletten
 /// (Palette.Light/Dark.xaml) und eigenen Styles (Controls.xaml).
 /// </summary>
@@ -26,7 +26,7 @@ public static class ThemeManager
         IsDark = dark;
 
         var app = Application.Current;
-#pragma warning disable WPF0001 // ThemeMode ist in .NET 9 als experimentell markiert.
+#pragma warning disable WPF0001 // ThemeMode ist als experimentell markiert.
         app.ThemeMode = dark ? ThemeMode.Dark : ThemeMode.Light;
 #pragma warning restore WPF0001
 
@@ -75,6 +75,27 @@ public static class ThemeManager
         var result = new ResourceDictionary { [AccentMarker] = true };
         var visited = new HashSet<ResourceDictionary>();
 
+        // Ab .NET 10 verweist das Fluent-Design direkt auf die Windows-Systemressourcen (SystemColors.Accent…Key)
+        // statt eigene Kopien anzulegen – diese Schlüssel daher ebenfalls überschreiben.
+        (ResourceKey ColorKey, ResourceKey BrushKey, Color Windows)[] systemKeys =
+        [
+            (SystemColors.AccentColorKey, SystemColors.AccentColorBrushKey, SystemColors.AccentColor),
+            (SystemColors.AccentColorLight1Key, SystemColors.AccentColorLight1BrushKey, SystemColors.AccentColorLight1),
+            (SystemColors.AccentColorLight2Key, SystemColors.AccentColorLight2BrushKey, SystemColors.AccentColorLight2),
+            (SystemColors.AccentColorLight3Key, SystemColors.AccentColorLight3BrushKey, SystemColors.AccentColorLight3),
+            (SystemColors.AccentColorDark1Key, SystemColors.AccentColorDark1BrushKey, SystemColors.AccentColorDark1),
+            (SystemColors.AccentColorDark2Key, SystemColors.AccentColorDark2BrushKey, SystemColors.AccentColorDark2),
+            (SystemColors.AccentColorDark3Key, SystemColors.AccentColorDark3BrushKey, SystemColors.AccentColorDark3),
+        ];
+        foreach (var (colorKey, brushKey, windows) in systemKeys)
+        {
+            var brand = map[Rgb(windows)];
+            result[colorKey] = brand;
+            var brush = new SolidColorBrush(brand);
+            brush.Freeze();
+            result[brushKey] = brush;
+        }
+
         void Scan(ResourceDictionary dict)
         {
             if (!visited.Add(dict) || IsOwnDictionary(dict)) return;
@@ -91,6 +112,15 @@ public static class ThemeManager
                         break;
                     case Color color when map.TryGetValue(Rgb(color), out var c):
                         result[key] = Color.FromArgb(color.A, c.R, c.G, c.B);
+                        break;
+                    // .NET 10: Fokuslinien usw. sind Verläufe (Akzentfarbe → transparent)
+                    case GradientBrush gradient when gradient.GradientStops.Any(s => map.ContainsKey(Rgb(s.Color))):
+                        var copy = gradient.Clone();
+                        foreach (var stop in copy.GradientStops)
+                            if (map.TryGetValue(Rgb(stop.Color), out var g))
+                                stop.Color = Color.FromArgb(stop.Color.A, g.R, g.G, g.B);
+                        copy.Freeze();
+                        result[key] = copy;
                         break;
                 }
             }

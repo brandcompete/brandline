@@ -2,7 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Eigene Styles für Schaltflächen, Reiter und Beschriftungen. Farben immer per DynamicResource,
          damit der Wechsel zwischen Hell und Dunkel ohne Neustart greift. Alle übrigen Steuerelemente
-         (Textfelder, Listen, Auswahllisten, Scrollbalken) gestaltet das Fluent-Design von .NET 9. -->
+         (Textfelder, Listen, Auswahllisten, Scrollbalken) gestaltet das Fluent-Design von .NET. -->
 
     <!-- Hausschrift wie auf brandcompete.com; Segoe UI als Rückfall -->
     <FontFamily x:Key="AppFont">pack://application:,,,/brandline;component/Fonts/#Rubik, Segoe UI</FontFamily>

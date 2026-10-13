@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <!-- Eigene GlobalUsings.cs: die impliziten Usings von WinForms (Tray-Symbol) kollidieren mit WPF. -->
     <ImplicitUsings>disable</ImplicitUsings>
@@ -16,7 +16,7 @@
     <AssemblyTitle>brandline</AssemblyTitle>
     <Product>brandline</Product>
     <Company>brandcompete</Company>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Copyright>© brandcompete GmbH</Copyright>
   </PropertyGroup>
 
@@ -31,7 +31,6 @@
   <ItemGroup>
     <PackageReference Include="NAudio" Version="3.1.0" />
     <PackageReference Include="SIPSorcery" Version="10.0.17" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
   </ItemGroup>
 
 </Project>
