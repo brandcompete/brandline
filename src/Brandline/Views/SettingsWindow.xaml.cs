@@ -41,6 +41,8 @@ public partial class SettingsWindow : Window
         ServerBox.Text = settings.Server;
         PortBox.Text = settings.Port.ToString();
         DisplayNameBox.Text = settings.DisplayName;
+        VoicemailNumberBox.Text = settings.VoicemailNumber;
+        HideCallerIdDefaultBox.IsChecked = settings.HideCallerId;
         TransportBox.ItemsSource = TransportChoices;
         TransportBox.SelectedItem = TransportChoices.First(t => t.Kind == settings.Transport);
         PasswordHint.Visibility = string.IsNullOrEmpty(settings.EncryptedPassword) ? Visibility.Collapsed : Visibility.Visible;
@@ -346,6 +348,8 @@ public partial class SettingsWindow : Window
         s.Port = port;
         s.Transport = (TransportBox.SelectedItem as TransportChoice)?.Kind ?? SipTransportKind.Udp;
         s.DisplayName = DisplayNameBox.Text.Trim();
+        s.VoicemailNumber = VoicemailNumberBox.Text.Trim();
+        s.HideCallerId = HideCallerIdDefaultBox.IsChecked == true;
         s.RingDevice = Selected(RingBox);
         s.RingTone = SelectedRingtone;
         s.RandomRingTones = RandomPool;

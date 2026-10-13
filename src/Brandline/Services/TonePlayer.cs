@@ -13,6 +13,7 @@ public sealed class TonePlayer : IDisposable
     public void PlayRing(string deviceId, string ringtoneId) =>
         Play(deviceId, Ringtones.Create(ringtoneId), AudioStreamCategory.Alerts);
     public void PlayRingback(string deviceId) => Play(deviceId, ToneProvider.Ringback(), AudioStreamCategory.Communications);
+    public void PlayCallWaiting(string deviceId) => Play(deviceId, ToneProvider.CallWaiting(), AudioStreamCategory.Communications);
 
     public void Stop()
     {
@@ -47,23 +48,26 @@ public sealed class TonePlayer : IDisposable
         private const int Rate = 16000;
         private const double Fade = 0.01;
 
-        private readonly double _onSeconds;
+        private readonly (double Start, double Length)[] _bursts;
         private readonly double _periodSeconds;
         private readonly float _amplitude;
-        private readonly Func<double, double> _frequencyAt;
+        private readonly double _frequency;
         private long _sample;
         private double _phase;
 
-        private ToneProvider(double on, double period, float amplitude, Func<double, double> frequencyAt)
+        private ToneProvider((double Start, double Length)[] bursts, double period, float amplitude, double frequency)
         {
-            _onSeconds = on;
+            _bursts = bursts;
             _periodSeconds = period;
             _amplitude = amplitude;
-            _frequencyAt = frequencyAt;
+            _frequency = frequency;
         }
 
         /// <summary>Deutscher Freiton: 425 Hz, 1 s an, 4 s aus.</summary>
-        public static ToneProvider Ringback() => new(1.0, 5.0, 0.2f, _ => 425);
+        public static ToneProvider Ringback() => new([(0, 1.0)], 5.0, 0.2f, 425);
+
+        /// <summary>Anklopfton: 425 Hz, 2 × 200 ms mit 200 ms Pause, dann 5 s Ruhe – leise, läuft im Gespräch mit.</summary>
+        public static ToneProvider CallWaiting() => new([(0, 0.2), (0.4, 0.2)], 5.6, 0.12f, 425);
 
         public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(Rate, 1);
 
@@ -72,15 +76,18 @@ public sealed class TonePlayer : IDisposable
             for (var i = 0; i < buffer.Length; i++, _sample++)
             {
                 var t = (double)_sample / Rate % _periodSeconds;
-                if (t >= _onSeconds)
+                var burst = Array.FindIndex(_bursts, b => t >= b.Start && t < b.Start + b.Length);
+                if (burst < 0)
                 {
                     buffer[i] = 0;
                     _phase = 0;
                     continue;
                 }
 
-                var envelope = Math.Min(1.0, Math.Min(t, _onSeconds - t) / Fade);
-                _phase += 2 * Math.PI * _frequencyAt(t) / Rate;
+                var (start, length) = _bursts[burst];
+                var inBurst = t - start;
+                var envelope = Math.Min(1.0, Math.Min(inBurst, length - inBurst) / Fade);
+                _phase += 2 * Math.PI * _frequency / Rate;
                 buffer[i] = (float)(Math.Sin(_phase) * envelope) * _amplitude;
             }
             return buffer.Length;

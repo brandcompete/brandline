@@ -34,6 +34,7 @@ public sealed class CallAudio : IAudioSource, IAudioSink, IDisposable
     private IMicCapture? _mic;
     private bool _sourcePaused;
     private bool _closed;
+    private bool _suspended;
 
     public CallAudio(string microphoneId, string speakerId, bool echoCancellation)
     {
@@ -173,7 +174,7 @@ public sealed class CallAudio : IAudioSource, IAudioSink, IDisposable
     {
         lock (_sync)
         {
-            if (_closed || _player != null) return;
+            if (_closed || _suspended || _player != null) return;
 
             try
             {
@@ -216,7 +217,7 @@ public sealed class CallAudio : IAudioSource, IAudioSink, IDisposable
     {
         lock (_sync)
         {
-            if (_closed) return;
+            if (_closed || _suspended) return;
             _mic?.Dispose();
             EchoCancellationActive = false;
             _mic = OpenPlainMicrophone();
@@ -241,17 +242,51 @@ public sealed class CallAudio : IAudioSource, IAudioSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gehaltenes Gespräch: Mikrofon und Lautsprecher freigeben, damit ein zweites Gespräch sie nutzen kann
+    /// (die Echounterdrückung darf nur einmal pro Gerät laufen). Die Sitzung selbst bleibt bestehen.
+    /// </summary>
+    public void SuspendDevices()
+    {
+        lock (_sync) _suspended = true;
+        ReleaseDevices();
+    }
+
+    /// <summary>
+    /// Geräte außerhalb der Sperre schließen: NAudio wartet beim Beenden auf den Aufnahme-Thread, was bei
+    /// gerade erst gestarteten Geräten dauern kann. Hielte das die Sperre, stünde der SIP-Empfang
+    /// (Start() aus der Antwort auf ein Re-INVITE) so lange still.
+    /// </summary>
+    private void ReleaseDevices()
+    {
+        IMicCapture? mic;
+        DevicePlayer? player;
+        lock (_sync)
+        {
+            mic = _mic;
+            _mic = null;
+            player = _player;
+            _player = null;
+        }
+        mic?.Dispose();
+        player?.Dispose();
+    }
+
+    /// <summary>Gespräch fortsetzen: Geräte wieder öffnen.</summary>
+    public void ResumeDevices()
+    {
+        lock (_sync) _suspended = false;
+        Start();
+    }
+
     public void Dispose()
     {
         lock (_sync)
         {
             if (_closed) return;
             _closed = true;
-            _mic?.Dispose();
-            _mic = null;
-            _player?.Dispose();
-            _player = null;
         }
+        ReleaseDevices();
         _encoder.Dispose();
         _jitter.Dispose();
     }

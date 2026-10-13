@@ -66,6 +66,12 @@ public sealed class AppSettings
     /// <summary>Systemweites Kürzel: markierte Nummer in beliebiger App wählen. Leer = aus.</summary>
     public string DialHotkey { get; set; } = "Ctrl+Alt+D";
 
+    /// <summary>Eigene Rufnummer standardmäßig unterdrücken (pro Anruf änderbar).</summary>
+    public bool HideCallerId { get; set; }
+
+    /// <summary>Nummer zum Abhören der Mailbox; leer = vom Server gemeldete Adresse verwenden.</summary>
+    public string VoicemailNumber { get; set; } = "";
+
     /// <summary>Eingehende Anrufe sofort abweisen.</summary>
     public bool DoNotDisturb { get; set; }
 

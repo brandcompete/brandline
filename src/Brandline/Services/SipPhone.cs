@@ -36,8 +36,11 @@ public sealed record CallParty(string Number, string DisplayName);
 
 public sealed record CallQuality(double JitterMs, double LossPercent, int BufferMs, bool EchoCancellation, bool Encrypted);
 
+/// <summary>Stand der Mailbox laut Server (SIP MWI).</summary>
+public sealed record VoicemailStatus(bool Waiting, int New, int Old, string Account);
+
 /// <summary>
-/// Kapselt SIP-Registrierung und genau einen Anruf gleichzeitig. Hält die Verbindung zum Server
+/// Kapselt SIP-Registrierung und bis zu zwei gleichzeitige Gespräche (aktiv + gehalten bzw. anklopfend). Hält die Verbindung zum Server
 /// aktiv (Keepalive) und meldet sich nach Netzwechsel oder Standby automatisch neu an.
 /// Alle Ereignisse werden auf Hintergrund-Threads ausgelöst.
 /// </summary>
@@ -60,18 +63,11 @@ public sealed class SipPhone : IAsyncDisposable
     private IPAddress? _publicIp;
     private bool _reconnectPending;
 
-    private SIPUserAgent? _ua;
-    private SIPServerUserAgent? _pendingIncoming;
-    private VoIPMediaSession? _media;
-    private CallAudio? _audio;
+    private const int MaxCalls = 2;
+    private static readonly TimeSpan TransferTimeout = TimeSpan.FromSeconds(30);
+    private readonly List<PhoneCall> _calls = [];
+    private SIPNotifierClient? _voicemailClient;
     private StreamWriter? _sipLog;
-    private SIPUserAgent? _localHangup;
-
-    // Für die Anrufliste.
-    private CallDirection _direction;
-    private DateTime _callStart;
-    private DateTime? _answeredAt;
-    private bool _rejectedByUser;
 
     public SipPhone()
     {
@@ -82,16 +78,15 @@ public sealed class SipPhone : IAsyncDisposable
     }
 
     public event Action<RegistrationState, string>? RegistrationChanged;
-    public event Action<CallState, string>? CallStateChanged;
-    public event Action<CallParty>? IncomingCall;
+    /// <summary>Gespräche haben sich geändert; Text = kurze Meldung für die Statuszeile.</summary>
+    public event Action<string>? CallsChanged;
+    /// <summary>Neuer eingehender Anruf; true = Anklopfen (während eines aktiven Gesprächs).</summary>
+    public event Action<PhoneCall, bool>? IncomingCall;
+    public event Action<VoicemailStatus>? VoicemailChanged;
     public event Action<CallRecord>? CallEnded;
     public event Action<string>? Info;
     public event Action<string>? Error;
 
-    public CallState State { get; private set; } = CallState.Idle;
-    public CallParty? Remote { get; private set; }
-    public bool IsMuted => _audio?.IsMuted ?? false;
-    public bool IsOnHold => _ua?.IsOnLocalHold ?? false;
     public bool DoNotDisturb { get; set; }
     public IPAddress? PublicIp => _publicIp;
 
@@ -101,9 +96,6 @@ public sealed class SipPhone : IAsyncDisposable
     /// <summary>Nur für automatisierte Tests mit selbstsignierten Zertifikaten – in der App immer null.</summary>
     public static RemoteCertificateValidationCallback? CertificateValidationOverride { get; set; }
 
-    public CallQuality? Quality => _audio is { } a && State == CallState.Connected
-        ? new CallQuality(a.JitterMs, a.LossPercent, a.BufferDelayMs, a.EchoCancellationActive, _media?.IsSecureContextReady() == true)
-        : null;
 
     // ---------------- Registrierung ----------------
 
@@ -151,6 +143,7 @@ public sealed class SipPhone : IAsyncDisposable
 
             RegistrationChanged?.Invoke(RegistrationState.Registering, $"Verbinde mit {settings.Server} …");
             registration.Start();
+            StartVoicemailSubscription(transport);
 
             // Keepalive auch bei TCP/TLS: hält die Verbindung im Router offen, über die Placetel Anrufe zustellt.
             if (settings.KeepAliveSeconds > 0)
@@ -181,7 +174,9 @@ public sealed class SipPhone : IAsyncDisposable
 
     private async Task StopCoreAsync()
     {
-        Hangup();
+        HangupAll();
+        _voicemailClient?.Stop();
+        _voicemailClient = null;
 
         _keepAliveTimer?.Dispose();
         _keepAliveTimer = null;
@@ -326,47 +321,101 @@ public sealed class SipPhone : IAsyncDisposable
         }
     }
 
+    // ---------------- Anrufe: Übersicht ----------------
+
+    /// <summary>Alle Gespräche (höchstens zwei): aktiv, gehalten, klingelnd/anklopfend.</summary>
+    public IReadOnlyList<PhoneCall> Calls
+    {
+        get { lock (_sync) return _calls.ToList(); }
+    }
+
+    /// <summary>Das Gespräch, das gerade Mikrofon und Lautsprecher hat (nicht gehalten, nicht klingelnd).</summary>
+    public PhoneCall? ActiveCall
+    {
+        get { lock (_sync) return _calls.FirstOrDefault(c => !c.IsOnHold && !c.IsRinging); }
+    }
+
+    public PhoneCall? HeldCall
+    {
+        get { lock (_sync) return _calls.FirstOrDefault(c => c.IsOnHold); }
+    }
+
+    public PhoneCall? RingingCall
+    {
+        get { lock (_sync) return _calls.FirstOrDefault(c => c.IsRinging); }
+    }
+
+    /// <summary>Zusammengefasster Zustand (für einfache Abfragen wie „läuft gerade ein Gespräch?“).</summary>
+    public CallState State
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (_calls.Count == 0) return CallState.Idle;
+                return _calls.FirstOrDefault(c => !c.IsOnHold && !c.IsRinging)?.State
+                       ?? (_calls.Any(c => c.IsRinging) ? CallState.Incoming : CallState.Connected);
+            }
+        }
+    }
+
+    public bool IsMuted => ActiveCall?.IsMuted ?? false;
+    public CallQuality? Quality => ActiveCall?.Quality;
+
     // ---------------- Ausgehende Anrufe ----------------
 
-    public async Task DialAsync(string input)
+    /// <summary>
+    /// Wählt eine Nummer. Läuft bereits ein Gespräch, wird es automatisch gehalten (Rückfrage).
+    /// </summary>
+    /// <param name="anonymous">Eigene Rufnummer unterdrücken (SIP-Header „Privacy: id“).</param>
+    public async Task<PhoneCall?> DialAsync(string input, bool anonymous = false)
     {
         var number = PhoneNumber.ForDialing(input);
-        if (number.Length == 0) return;
+        if (number.Length == 0) return null;
 
-        SIPUserAgent ua;
+        PhoneCall call;
+        PhoneCall? toHold;
         lock (_sync)
         {
-            if (_transport == null || _ua != null) return;
-            ua = new SIPUserAgent(_transport, null);
-            _ua = ua;
-            Remote = new CallParty(number, "");
-            BeginRecord(CallDirection.Outgoing);
-            WireCall(ua);
+            if (_transport == null || _calls.Count >= MaxCalls || _calls.Any(c => c.IsRinging)) return null;
+            toHold = _calls.FirstOrDefault(c => !c.IsOnHold);
+            call = new PhoneCall(new SIPUserAgent(_transport, null), CallDirection.Outgoing, new CallParty(number, ""))
+            {
+                Anonymous = anonymous,
+                Info = "Wähle …",
+                ConsultationFor = toHold,
+            };
+            _calls.Add(call);
         }
+        if (toHold != null) Hold(toHold);
+        WireCall(call);
 
+        var ua = call.Ua;
         var target = $"sip:{number}@{RegistrarHost()}";
-        var from = string.IsNullOrWhiteSpace(_settings.DisplayName)
+        var from = string.IsNullOrWhiteSpace(_settings.DisplayName) || anonymous
             ? $"<sip:{_settings.SipUser}@{_settings.Server}>"
             : $"\"{_settings.DisplayName.Replace("\"", "")}\" <sip:{_settings.SipUser}@{_settings.Server}>";
+        // RFC 3323/3325: Der Anbieter soll die Rufnummer gegenüber dem Angerufenen nicht anzeigen.
+        var headers = anonymous ? new List<string> { "Privacy: id" } : null;
 
         var descriptor = new SIPCallDescriptor(
             _settings.SipUser, _settings.Password, target, from, target,
-            null, null, null, SIPCallDirection.Out, SDP.SDP_MIME_CONTENTTYPE, null, null);
+            null, headers, null, SIPCallDirection.Out, SDP.SDP_MIME_CONTENTTYPE, null, null);
 
-        ua.ClientCallTrying += (_, _) => SetState(CallState.Dialing, "Verbinde …");
+        ua.ClientCallTrying += (_, _) => Update(call, CallState.Dialing, "Verbinde …");
         ua.ClientCallRinging += (_, response) =>
         {
             // Ohne Early Media (183 mit SDP) spielen wir den Freiton selbst.
-            if (string.IsNullOrEmpty(response?.Body)) _tones.PlayRingback(_settings.SpeakerDevice);
-            SetState(CallState.RemoteRinging, "Es klingelt …");
+            call.LocalRingback = string.IsNullOrEmpty(response?.Body);
+            Update(call, CallState.RemoteRinging, "Es klingelt …");
         };
-        ua.ClientCallFailed += (_, error, response) => EndCall(ua, DescribeCallFailure(response, error));
+        ua.ClientCallFailed += (_, error, response) => EndCall(call, DescribeCallFailure(response, error));
 
-        SetState(CallState.Dialing, "Wähle …");
+        Changed(call.Info);
         bool answered;
         try
         {
-            answered = await ua.Call(descriptor, CreateMedia(), 120);
+            answered = await ua.Call(descriptor, CreateMedia(call), 120);
         }
         catch (Exception ex)
         {
@@ -376,14 +425,15 @@ public sealed class SipPhone : IAsyncDisposable
 
         if (answered)
         {
-            _tones.Stop();
-            _answeredAt = DateTime.Now;
-            SetState(CallState.Connected, "Verbunden");
+            call.AnsweredAt = DateTime.Now;
+            call.LocalRingback = false;
+            Update(call, CallState.Connected, "Verbunden");
         }
         else
         {
-            EndCall(ua, "Nicht verbunden");
+            EndCall(call, "Nicht verbunden");
         }
+        return call;
     }
 
     private static string DescribeCallFailure(SIPResponse? response, string? error)
@@ -405,7 +455,7 @@ public sealed class SipPhone : IAsyncDisposable
 
     private Task OnTransportRequest(SIPEndPoint localEndPoint, SIPEndPoint remoteEndPoint, SIPRequest request)
     {
-        // Anfragen innerhalb eines Dialogs (BYE, re-INVITE …) bearbeitet der SIPUserAgent des Anrufs.
+        // Anfragen innerhalb eines Dialogs (BYE, re-INVITE, REFER-NOTIFY …) bearbeitet der SIPUserAgent des Anrufs.
         if (!string.IsNullOrEmpty(request.Header.To?.ToTag)) return Task.CompletedTask;
 
         switch (request.Method)
@@ -417,6 +467,11 @@ public sealed class SipPhone : IAsyncDisposable
                 // Erreichbarkeitsprüfung des Servers beantworten.
                 _ = _transport?.SendResponseAsync(SIPResponse.GetResponse(request, SIPResponseStatusCodesEnum.Ok, null));
                 break;
+            case SIPMethodsEnum.NOTIFY when request.Header.Event?.StartsWith("message-summary", StringComparison.OrdinalIgnoreCase) == true:
+                // Manche Anlagen melden neue Sprachnachrichten ohne vorheriges SUBSCRIBE.
+                OnVoicemailNotification(request.Body);
+                _ = _transport?.SendResponseAsync(SIPResponse.GetResponse(request, SIPResponseStatusCodesEnum.Ok, null));
+                break;
         }
         return Task.CompletedTask;
     }
@@ -424,45 +479,51 @@ public sealed class SipPhone : IAsyncDisposable
     private void HandleIncomingInvite(SIPRequest request)
     {
         var caller = ReadCaller(request);
+        PhoneCall call;
+        bool waiting;
 
         lock (_sync)
         {
             if (_transport == null) return;
 
             string? rejectNote = null;
-            if (_ua != null) rejectNote = "während eines Gesprächs";
-            else if (DoNotDisturb) rejectNote = "Nicht stören";
+            if (DoNotDisturb) rejectNote = "Nicht stören";
+            else if (_calls.Count >= MaxCalls || _calls.Any(c => c.IsRinging)) rejectNote = "besetzt (zwei Gespräche)";
 
             if (rejectNote != null)
             {
                 // Besetzt melden – Placetel leitet dann gemäß Routing weiter (z. B. Mailbox).
                 var busyTx = new UASInviteTransaction(_transport, request, null, false);
                 busyTx.SendFinalResponse(SIPResponse.GetResponse(request, SIPResponseStatusCodesEnum.BusyHere, null));
+                var missed = !DoNotDisturb;
                 CallEnded?.Invoke(new CallRecord
                 {
                     Direction = CallDirection.Incoming,
-                    Outcome = _ua != null ? CallOutcome.Missed : CallOutcome.Rejected,
+                    Outcome = missed ? CallOutcome.Missed : CallOutcome.Rejected,
                     Number = caller.Number,
                     Name = caller.DisplayName,
                     Start = DateTime.Now,
                     Note = rejectNote,
-                    Unseen = _ua != null,
+                    Unseen = missed,
                 });
                 return;
             }
 
-            var ua = new SIPUserAgent(_transport, null);
-            _ua = ua;
-            Remote = caller;
-            BeginRecord(CallDirection.Incoming);
-            WireCall(ua);
-            ua.ServerCallCancelled += (_, _) => EndCall(ua, "Verpasster Anruf");
-            _pendingIncoming = ua.AcceptCall(request);
+            // Anklopfen, wenn bereits ein Gespräch aktiv ist (nicht nur gehalten).
+            waiting = _calls.Any(c => !c.IsOnHold);
+            call = new PhoneCall(new SIPUserAgent(_transport, null), CallDirection.Incoming, caller)
+            {
+                State = CallState.Incoming,
+                Info = waiting ? "Anklopfen" : "Eingehender Anruf",
+            };
+            _calls.Add(call);
         }
 
-        _tones.PlayRing(_settings.RingDevice, Ringtones.PickForCall(_settings.RingTone, _settings.RandomRingTones));
-        SetState(CallState.Incoming, "Eingehender Anruf");
-        IncomingCall?.Invoke(caller);
+        WireCall(call);
+        call.Ua.ServerCallCancelled += (_, _) => EndCall(call, "Verpasster Anruf");
+        call.PendingIncoming = call.Ua.AcceptCall(request);
+        Changed(call.Info);
+        IncomingCall?.Invoke(call, waiting);
     }
 
     private static CallParty ReadCaller(SIPRequest request)
@@ -485,24 +546,21 @@ public sealed class SipPhone : IAsyncDisposable
         return new CallParty(number, name);
     }
 
-    public async Task AnswerAsync()
+    /// <summary>Klingelnden/anklopfenden Anruf annehmen; ein laufendes Gespräch wird dabei gehalten.</summary>
+    public async Task AnswerAsync(PhoneCall? call = null)
     {
-        SIPUserAgent? ua;
-        SIPServerUserAgent? uas;
-        lock (_sync)
-        {
-            ua = _ua;
-            uas = _pendingIncoming;
-            _pendingIncoming = null;
-        }
-        if (ua == null || uas == null) return;
+        call ??= RingingCall;
+        if (call?.PendingIncoming is not { } uas) return;
+        call.PendingIncoming = null;
 
-        _tones.Stop();
-        SetState(CallState.Dialing, "Nehme an …");
+        var active = ActiveCall;
+        if (active != null) Hold(active);
+
+        Update(call, CallState.Dialing, "Nehme an …");
         bool ok;
         try
         {
-            ok = await ua.Answer(uas, CreateMedia());
+            ok = await call.Ua.Answer(uas, CreateMedia(call));
         }
         catch (Exception ex)
         {
@@ -512,74 +570,113 @@ public sealed class SipPhone : IAsyncDisposable
 
         if (ok)
         {
-            _answeredAt = DateTime.Now;
-            SetState(CallState.Connected, "Verbunden");
+            call.AnsweredAt = DateTime.Now;
+            Update(call, CallState.Connected, "Verbunden");
         }
         else
         {
-            EndCall(ua, "Annehmen fehlgeschlagen");
+            EndCall(call, "Annehmen fehlgeschlagen");
         }
     }
 
     // ---------------- Während des Gesprächs ----------------
 
-    public void Hangup()
+    /// <summary>
+    /// Auflegen bzw. ablehnen. Ohne Angabe: das aktive Gespräch, sonst der klingelnde Anruf.
+    /// Ein gehaltenes Gespräch bleibt gehalten (der Benutzer setzt es bewusst fort).
+    /// </summary>
+    public void Hangup(PhoneCall? call = null)
     {
-        SIPUserAgent? ua;
-        SIPServerUserAgent? incoming;
-        lock (_sync)
-        {
-            ua = _ua;
-            incoming = _pendingIncoming;
-            _pendingIncoming = null;
-        }
-        if (ua == null) return;
+        call ??= ActiveCall ?? RingingCall;
+        if (call == null) return;
 
-        try
+        var incoming = call.PendingIncoming;
+        call.PendingIncoming = null;
+        Action? signal = null;
+        if (incoming != null)
         {
-            if (incoming != null)
-            {
-                _rejectedByUser = true;
-                incoming.Reject(SIPResponseStatusCodesEnum.BusyHere, null);
-            }
-            else if (ua.IsCallActive)
-            {
-                // Hangup() löst OnCallHungup aus; so wird das nicht als Auflegen der Gegenseite gemeldet.
-                _localHangup = ua;
-                ua.Hangup();
-            }
-            else if (ua.IsCalling || ua.IsRinging)
-            {
-                ua.Cancel();
-            }
+            call.RejectedByUser = true;
+            signal = () => incoming.Reject(SIPResponseStatusCodesEnum.BusyHere, null);
         }
-        catch (Exception ex)
+        else if (call.Ua.IsCallActive)
         {
-            Error?.Invoke($"Auflegen: {ex.Message}");
+            // LocalHangup: OnCallHungup soll das nicht als Auflegen der Gegenseite melden.
+            call.LocalHangup = true;
+            signal = call.Ua.Hangup;
         }
-        EndCall(ua, incoming != null ? "Abgelehnt" : "Aufgelegt");
+        else if (call.Ua.IsCalling || call.Ua.IsRinging)
+        {
+            signal = call.Ua.Cancel;
+        }
+        EndCall(call, incoming != null ? "Abgelehnt" : "Aufgelegt", signal);
+    }
+
+    private void HangupAll()
+    {
+        foreach (var call in Calls) Hangup(call);
+    }
+
+    /// <summary>Gespräch halten: Gegenseite hört Wartemusik/Stille, Mikrofon und Lautsprecher werden frei.</summary>
+    public void Hold(PhoneCall call)
+    {
+        if (call.IsOnHold || !call.Ua.IsCallActive) return;
+        call.Ua.PutOnHold();
+        call.Audio?.SuspendDevices();
+        call.IsOnHold = true;
+        call.Info = "Gehalten";
+        Changed($"{Describe(call)} gehalten");
+    }
+
+    /// <summary>Gehaltenes Gespräch fortsetzen; ein anderes aktives Gespräch wird dabei gehalten (Makeln).</summary>
+    public void Resume(PhoneCall call)
+    {
+        if (!call.IsOnHold) return;
+        var other = ActiveCall;
+        if (other != null && other != call)
+        {
+            if (other.IsConnected) Hold(other);
+            else return; // Verbindungsaufbau läuft noch – nicht dazwischenfunken
+        }
+        call.Audio?.ResumeDevices();
+        call.Ua.TakeOffHold();
+        call.IsOnHold = false;
+        call.Info = "Verbunden";
+        Changed($"{Describe(call)} fortgesetzt");
+    }
+
+    /// <summary>Zwischen aktivem und gehaltenem Gespräch wechseln.</summary>
+    public void Swap()
+    {
+        if (HeldCall is { } held) Resume(held);
+    }
+
+    /// <summary>Halten des aktiven Gesprächs ein-/ausschalten (eine Leitung).</summary>
+    public void ToggleHold()
+    {
+        if (ActiveCall is { IsConnected: true } active) Hold(active);
+        else if (HeldCall is { } held) Resume(held);
     }
 
     /// <summary>Klingelton abschalten, der Anruf klingelt beim Anrufer weiter.</summary>
-    public void SilenceRinging() => _tones.Stop();
+    public void SilenceRinging()
+    {
+        _silenced = true;
+        _tones.Stop();
+        _tone = ToneKind.None;
+    }
 
     public void ToggleMute()
     {
-        if (_audio != null) _audio.IsMuted = !_audio.IsMuted;
-    }
-
-    public void ToggleHold()
-    {
-        var ua = _ua;
-        if (ua == null || !ua.IsCallActive) return;
-        if (ua.IsOnLocalHold) ua.TakeOffHold();
-        else ua.PutOnHold();
+        if (ActiveCall?.Audio is { } audio)
+        {
+            audio.IsMuted = !audio.IsMuted;
+            Changed(audio.IsMuted ? "Stummgeschaltet" : "Mikrofon an");
+        }
     }
 
     public void SendDtmf(char key)
     {
-        var ua = _ua;
-        if (ua == null || State != CallState.Connected) return;
+        if (ActiveCall is not { IsConnected: true } call) return;
         byte? tone = key switch
         {
             >= '0' and <= '9' => (byte)(key - '0'),
@@ -587,27 +684,154 @@ public sealed class SipPhone : IAsyncDisposable
             '#' => 11,
             _ => null
         };
-        if (tone != null) _ = ua.SendDtmf(tone.Value);
+        if (tone != null) _ = call.Ua.SendDtmf(tone.Value);
+    }
+
+    // ---------------- Weiterleiten ----------------
+
+    /// <summary>
+    /// Direkt weiterleiten (Blind Transfer, SIP REFER): die Gegenseite wird mit der Zielnummer verbunden,
+    /// unser Gespräch endet. Liefert eine Fehlermeldung oder null bei Erfolg.
+    /// </summary>
+    public async Task<string?> BlindTransferAsync(PhoneCall call, string input)
+    {
+        var number = PhoneNumber.ForDialing(input);
+        if (number.Length == 0) return "Bitte eine Zielnummer angeben.";
+        if (!call.IsConnected) return "Nur ein verbundenes Gespräch kann weitergeleitet werden.";
+
+        if (call.IsOnHold) Resume(call);
+        Update(call, call.State, $"Leite weiter an {number} …");
+        try
+        {
+            var destination = SIPURI.ParseSIPURIRelaxed($"sip:{number}@{RegistrarHost()}");
+            var ok = await call.Ua.BlindTransfer(destination, TransferTimeout, CancellationToken.None,
+                null, _settings.SipUser, _settings.Password);
+            if (!ok) return FailTransfer(call, "Weiterleiten fehlgeschlagen – das Ziel hat nicht angenommen.");
+
+            call.TransferredTo = number;
+            call.LocalHangup = true;
+            EndCall(call, $"Weitergeleitet an {number}", call.Ua.IsCallActive ? call.Ua.Hangup : null);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return FailTransfer(call, $"Weiterleiten fehlgeschlagen: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Mit Rückfrage weiterleiten (Attended Transfer): das gehaltene Gespräch wird mit dem aktiven
+    /// Rückfragegespräch verbunden (REFER mit Replaces), beide Leitungen von uns enden.
+    /// </summary>
+    public async Task<string?> CompleteAttendedTransferAsync()
+    {
+        var held = HeldCall;
+        var consult = ActiveCall;
+        if (held == null || consult is not { IsConnected: true }) return "Für das Verbinden werden ein gehaltenes und ein aktives Gespräch benötigt.";
+
+        Update(consult, consult.State, "Verbinde beide Gespräche …");
+        try
+        {
+            var ok = await held.Ua.AttendedTransfer(consult.Ua.Dialogue, TransferTimeout, CancellationToken.None,
+                null, _settings.SipUser, _settings.Password);
+            if (!ok) return FailTransfer(consult, "Verbinden fehlgeschlagen – bitte erneut versuchen oder direkt weiterleiten.");
+
+            held.TransferredTo = consult.Remote.Number;
+            consult.TransferredTo = held.Remote.Number;
+            foreach (var call in new[] { held, consult })
+            {
+                call.LocalHangup = true;
+                EndCall(call, "Verbunden und übergeben", call.Ua.IsCallActive ? call.Ua.Hangup : null);
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return FailTransfer(consult, $"Verbinden fehlgeschlagen: {ex.Message}");
+        }
+    }
+
+    private string FailTransfer(PhoneCall call, string message)
+    {
+        Update(call, call.State, call.IsConnected ? "Verbunden" : call.Info);
+        Error?.Invoke(message);
+        return message;
+    }
+
+    // ---------------- Sprachnachrichten (MWI) ----------------
+
+    public VoicemailStatus Voicemail { get; private set; } = new(false, 0, 0, "");
+
+    private void StartVoicemailSubscription(SIPTransport transport)
+    {
+        try
+        {
+            var aor = SIPURI.ParseSIPURIRelaxed($"sip:{_settings.SipUser}@{RegistrarHost()}");
+            var client = new SIPNotifierClient(transport, null, SIPEventPackagesEnum.MessageSummary, aor,
+                _settings.SipUser, _settings.Server, _settings.Password, 3600, null);
+            client.NotificationReceived += (_, body) => OnVoicemailNotification(body);
+            client.SubscriptionFailed += (_, status, reason) => LogLine($"MWI: Abonnement abgelehnt ({(int)status} {reason})");
+            client.Start();
+            _voicemailClient = client;
+        }
+        catch (Exception ex)
+        {
+            LogLine($"MWI: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// RFC 3842 „simple-message-summary“, z. B.:
+    /// Messages-Waiting: yes / Message-Account: sip:*55@fpbx.de / Voice-Message: 2/8 (0/0)
+    /// </summary>
+    private void OnVoicemailNotification(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return;
+        bool waiting = false;
+        int newCount = 0, oldCount = 0;
+        var account = "";
+        foreach (var raw in body.Split('\n'))
+        {
+            var line = raw.Trim();
+            var colon = line.IndexOf(':');
+            if (colon < 0) continue;
+            var name = line[..colon].Trim();
+            var value = line[(colon + 1)..].Trim();
+            if (name.Equals("Messages-Waiting", StringComparison.OrdinalIgnoreCase))
+                waiting = value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+            else if (name.Equals("Message-Account", StringComparison.OrdinalIgnoreCase))
+                account = value;
+            else if (name.Equals("Voice-Message", StringComparison.OrdinalIgnoreCase))
+            {
+                var counts = value.Split(' ')[0].Split('/');
+                if (counts.Length == 2) { int.TryParse(counts[0], out newCount); int.TryParse(counts[1], out oldCount); }
+            }
+        }
+        if (waiting && newCount == 0) newCount = 1; // „yes“ ohne Anzahl
+        Voicemail = new VoicemailStatus(waiting, newCount, oldCount, account);
+        VoicemailChanged?.Invoke(Voicemail);
+    }
+
+    /// <summary>Nummer zum Abhören der Mailbox: Einstellung, sonst die vom Server gemeldete Adresse.</summary>
+    public string? VoicemailDialTarget()
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.VoicemailNumber)) return _settings.VoicemailNumber;
+        if (Voicemail.Account.Length == 0) return null;
+        try { return SIPURI.ParseSIPURIRelaxed(Voicemail.Account).User; }
+        catch { return null; }
     }
 
     // ---------------- Interna ----------------
 
-    private void BeginRecord(CallDirection direction)
+    private void WireCall(PhoneCall call)
     {
-        _direction = direction;
-        _callStart = DateTime.Now;
-        _answeredAt = null;
-        _rejectedByUser = false;
+        call.Ua.OnCallHungup += _ => EndCall(call, call.LocalHangup ? "Aufgelegt"
+            : call.TransferredTo != null ? $"Weitergeleitet an {call.TransferredTo}" : "Gegenseite hat aufgelegt");
+        call.Ua.RemotePutOnHold += () => { call.IsHeldByRemote = true; Changed($"{Describe(call)} hat gehalten"); };
+        call.Ua.RemoteTookOffHold += () => { call.IsHeldByRemote = false; Changed($"{Describe(call)} ist zurück"); };
     }
 
-    private void WireCall(SIPUserAgent ua)
-    {
-        ua.OnCallHungup += _ => EndCall(ua, _localHangup == ua ? "Aufgelegt" : "Gegenseite hat aufgelegt");
-        ua.RemotePutOnHold += () => CallStateChanged?.Invoke(State, "Gegenseite hat gehalten");
-        ua.RemoteTookOffHold += () => CallStateChanged?.Invoke(State, "Verbunden");
-    }
-
-    private VoIPMediaSession CreateMedia()
+    private VoIPMediaSession CreateMedia(PhoneCall call)
     {
         var audio = new CallAudio(_settings.MicrophoneDevice, _settings.SpeakerDevice, _settings.EchoCancellation);
         audio.OnAudioSourceError += msg => Error?.Invoke(msg);
@@ -630,66 +854,111 @@ public sealed class SipPhone : IAsyncDisposable
             if (mediaType == SDPMediaTypesEnum.audio) audio.ReceiveRtp(packet);
         };
 
-        lock (_sync)
-        {
-            _audio = audio;
-            _media = media;
-        }
+        call.Audio = audio;
+        call.Media = media;
         return media;
     }
 
-    private void EndCall(SIPUserAgent ua, string? reason)
+    /// <param name="signal">
+    /// SIP-Abschluss (BYE/CANCEL/Ablehnen). Läuft wie das Freigeben der Audiogeräte im Hintergrund:
+    /// SIPSorcery wartet beim Auflegen auf die Bestätigung der Gegenseite (bis zu 30 s) – das Fenster
+    /// soll dabei nicht hängen.
+    /// </param>
+    private void EndCall(PhoneCall call, string? reason, Action? signal = null)
     {
-        VoIPMediaSession? media;
-        CallAudio? audio;
-        CallParty? remote;
         lock (_sync)
         {
-            if (_ua != ua) return;
-            media = _media;
-            audio = _audio;
-            remote = Remote;
-            _ua = null;
-            _media = null;
-            _audio = null;
-            _pendingIncoming = null;
-            _localHangup = null;
+            if (!_calls.Remove(call)) return;
+            foreach (var other in _calls.Where(c => c.ConsultationFor == call)) other.ConsultationFor = null;
         }
 
-        _tones.Stop();
-        try { media?.Close("Anruf beendet"); } catch { /* bereits geschlossen */ }
-        audio?.Dispose();
-        // Close() statt Dispose(): Dispose() wartet in SIPSorcery 10 auf ein Semaphor, das nach
-        // ausgehenden Anrufen nicht freigegeben wird, und blockiert dann dauerhaft.
-        ua.Close();
+        // Reihenfolge einhalten (erst BYE, dann Medien schließen): Parallel dazu blockiert SIPSorcery
+        // sonst den Empfang, wenn gerade noch eine Antwort auf ein Re-INVITE (Halten/Fortsetzen) eintrifft.
+        _ = Task.Run(() =>
+        {
+            try { signal?.Invoke(); }
+            catch (Exception ex) { LogLine($"Auflegen {call.Remote.Number}: {ex.Message}"); }
+            try { call.Media?.Close("Anruf beendet"); } catch { /* bereits geschlossen */ }
+            try { call.Audio?.Dispose(); } catch (Exception ex) { LogLine($"Audio freigeben: {ex.Message}"); }
+            // Close() statt Dispose(): Dispose() wartet in SIPSorcery 10 auf ein Semaphor, das nach
+            // ausgehenden Anrufen nicht freigegeben wird, und blockiert dann dauerhaft.
+            call.Ua.Close();
+        });
 
-        var outcome = _answeredAt != null
+        var outcome = call.AnsweredAt != null
             ? CallOutcome.Answered
-            : _direction == CallDirection.Outgoing ? CallOutcome.NotReached
-            : _rejectedByUser ? CallOutcome.Rejected : CallOutcome.Missed;
+            : call.Direction == CallDirection.Outgoing ? CallOutcome.NotReached
+            : call.RejectedByUser ? CallOutcome.Rejected : CallOutcome.Missed;
         CallEnded?.Invoke(new CallRecord
         {
-            Direction = _direction,
+            Direction = call.Direction,
             Outcome = outcome,
-            Number = remote?.Number ?? "",
-            Name = remote?.DisplayName ?? "",
-            Start = _callStart,
-            Duration = _answeredAt is { } at ? DateTime.Now - at : TimeSpan.Zero,
-            Note = outcome == CallOutcome.NotReached ? reason ?? "" : "",
+            Number = call.Remote.Number,
+            Name = call.Remote.DisplayName,
+            Start = call.Start,
+            Duration = call.AnsweredAt is { } at ? DateTime.Now - at : TimeSpan.Zero,
+            Note = call.TransferredTo != null ? $"weitergeleitet an {call.TransferredTo}"
+                : outcome == CallOutcome.NotReached ? reason ?? "" : "",
             Unseen = outcome == CallOutcome.Missed,
         });
 
-        SetState(CallState.Idle, reason ?? "");
-        Remote = null;
+        call.State = CallState.Idle;
+        call.Info = reason ?? "";
+        var remaining = Calls;
+        Changed(remaining.Count > 0 && remaining.All(c => c.IsOnHold)
+            ? $"{reason} – {Describe(remaining[0])} wartet (gehalten)"
+            : reason ?? "");
 
-        if (_reconnectPending) _reconnectTimer.Change(TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
+        if (remaining.Count == 0 && _reconnectPending) _reconnectTimer.Change(TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
     }
 
-    private void SetState(CallState state, string info)
+    private void Update(PhoneCall call, CallState state, string info)
     {
-        State = state;
-        CallStateChanged?.Invoke(state, info);
+        call.State = state;
+        call.Info = info;
+        Changed(info);
     }
+
+    /// <summary>Gesprächsliste hat sich geändert – Töne anpassen und Oberfläche benachrichtigen.</summary>
+    private void Changed(string info)
+    {
+        UpdateTones();
+        CallsChanged?.Invoke(info);
+    }
+
+    private enum ToneKind { None, Ring, CallWaiting, Ringback }
+    private ToneKind _tone;
+    private bool _silenced;
+
+    /// <summary>Klingelton, Anklopfton oder Freiton passend zum aktuellen Zustand – nie mehrere gleichzeitig.</summary>
+    private void UpdateTones()
+    {
+        var calls = Calls;
+        var ringing = calls.FirstOrDefault(c => c.IsRinging);
+        var hasActive = calls.Any(c => !c.IsOnHold && !c.IsRinging);
+        var wanted = ringing != null
+            ? (hasActive ? ToneKind.CallWaiting : ToneKind.Ring)
+            : calls.Any(c => !c.IsOnHold && c.State == CallState.RemoteRinging && c.LocalRingback) ? ToneKind.Ringback
+            : ToneKind.None;
+
+        if (ringing == null) _silenced = false;
+        if (_silenced && wanted is ToneKind.Ring or ToneKind.CallWaiting) wanted = ToneKind.None;
+        if (wanted == _tone) return;
+
+        _tone = wanted;
+        switch (wanted)
+        {
+            case ToneKind.Ring: _tones.PlayRing(_settings.RingDevice, Ringtones.PickForCall(_settings.RingTone, _settings.RandomRingTones)); break;
+            case ToneKind.CallWaiting: _tones.PlayCallWaiting(_settings.SpeakerDevice); break;
+            case ToneKind.Ringback: _tones.PlayRingback(_settings.SpeakerDevice); break;
+            default: _tones.Stop(); break;
+        }
+    }
+
+    private static string Describe(PhoneCall call) =>
+        string.IsNullOrWhiteSpace(call.Remote.DisplayName)
+            ? (call.Remote.Number.Length > 0 ? call.Remote.Number : "Anrufer")
+            : call.Remote.DisplayName;
 
     private void AttachSipLog(SIPTransport transport)
     {

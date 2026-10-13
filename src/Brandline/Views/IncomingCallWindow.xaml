@@ -35,7 +35,7 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Width="9" Height="9" CornerRadius="2" Background="#A91212" Margin="0,1,7,0"/>
                     <TextBlock Foreground="{DynamicResource HeaderMuted}" FontSize="12">
-                        <Run Text="brand" FontWeight="Bold"/><Run Text="line · Eingehender Anruf"/>
+                        <Run Text="brand" FontWeight="Bold"/><Run Text="line · "/><Run x:Name="KindText" Text="Eingehender Anruf"/>
                     </TextBlock>
                 </StackPanel>
             </DockPanel>
@@ -50,7 +50,7 @@
                 <Button Style="{StaticResource GreenButton}" Margin="0,0,5,0" Padding="0,9" Click="OnAnswer">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" Margin="0,2,8,0"/>
-                        <TextBlock Text="Annehmen"/>
+                        <TextBlock x:Name="AnswerText" Text="Annehmen"/>
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource RedButton}" Margin="5,0,0,0" Padding="0,9" Click="OnReject">

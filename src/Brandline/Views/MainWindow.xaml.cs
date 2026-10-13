@@ -33,7 +33,6 @@ public partial class MainWindow : Window
     private AppSettings _settings;
     private RegistrationState _registration = RegistrationState.Offline;
     private string _registrationText = "Nicht angemeldet";
-    private DateTime _connectedAt;
     private bool _exitRequested;
     private bool _hideHintShown;
 
@@ -56,6 +55,7 @@ public partial class MainWindow : Window
 
         BuildDialPad();
         DndToggle.IsChecked = settings.DoNotDisturb;
+        HideCallerIdBox.IsChecked = settings.HideCallerId;
 
         _tray = new TrayIcon(ShowFromTray, () => SetDoNotDisturb(!_phone.DoNotDisturb), () => OnSettings(this, new RoutedEventArgs()),
             () => OnAbout(this, new RoutedEventArgs()),
@@ -64,8 +64,9 @@ public partial class MainWindow : Window
         _tray.SetDoNotDisturb(settings.DoNotDisturb);
 
         _phone.RegistrationChanged += (state, text) => Dispatcher.BeginInvoke(() => ShowRegistration(state, text));
-        _phone.CallStateChanged += (state, info) => Dispatcher.BeginInvoke(() => ShowCallState(state, info));
-        _phone.IncomingCall += caller => Dispatcher.BeginInvoke(() => ShowIncoming(caller));
+        _phone.CallsChanged += info => Dispatcher.BeginInvoke(() => RefreshCalls(info));
+        _phone.IncomingCall += (call, waiting) => Dispatcher.BeginInvoke(() => ShowIncoming(call, waiting));
+        _phone.VoicemailChanged += status => Dispatcher.BeginInvoke(() => ShowVoicemail(status));
         _phone.CallEnded += record => Dispatcher.BeginInvoke(() => AddCallRecord(record));
         _phone.Info += msg => Dispatcher.BeginInvoke(() => StatusText.Text = msg);
         _phone.Error += msg => Dispatcher.BeginInvoke(() => StatusText.Text = msg);
@@ -194,7 +195,7 @@ public partial class MainWindow : Window
     {
         query = query.Trim();
         var digits = PhoneNumber.ForDialing(query);
-        if (query.Length == 0 || exactMatch || _phone.State != CallState.Idle)
+        if (query.Length == 0 || exactMatch || _phone.Calls.Count >= 2)
         {
             SuggestionList.Visibility = Visibility.Collapsed;
             return;
@@ -287,9 +288,9 @@ public partial class MainWindow : Window
             StatusText.Text = "Bitte eine Nummer eingeben.";
             return;
         }
-        if (_phone.State != CallState.Idle)
+        if (_phone.Calls.Count >= 2 || _phone.RingingCall != null)
         {
-            StatusText.Text = "Es läuft bereits ein Gespräch.";
+            StatusText.Text = "Es sind bereits zwei Gespräche aktiv – bitte zuerst eines beenden.";
             return;
         }
         if (!_settings.IsComplete)
@@ -300,7 +301,8 @@ public partial class MainWindow : Window
         Tabs.SelectedIndex = 0;
         SuggestionList.Visibility = Visibility.Collapsed;
         NumberBox.Text = number;
-        await _phone.DialAsync(number);
+        // Läuft schon ein Gespräch, wird es gehalten (Rückfrage).
+        await _phone.DialAsync(number, HideCallerIdBox.IsChecked == true);
     }
 
     /// <summary>Globales Tastenkürzel: markierte Nummer aus einer beliebigen App wählen.</summary>
@@ -317,33 +319,83 @@ public partial class MainWindow : Window
         await Dial(number);
     }
 
-    private async void OnAnswer(object sender, RoutedEventArgs e) => await _phone.AnswerAsync();
-    private void OnHangup(object sender, RoutedEventArgs e) => _phone.Hangup();
+    // ---------------- Gesprächssteuerung ----------------
 
-    private void OnMute(object sender, RoutedEventArgs e)
+    /// <summary>Im großen Gesprächsbereich angezeigtes Gespräch und das zweite (gehalten/anklopfend).</summary>
+    private PhoneCall? _shownCall;
+    private PhoneCall? _secondCall;
+
+    private async void OnAnswer(object sender, RoutedEventArgs e)
     {
-        _phone.ToggleMute();
-        MuteButton.Content = _phone.IsMuted ? "Stumm aus" : "Stumm";
-        MuteButton.SetResourceReference(BackgroundProperty, _phone.IsMuted ? "Highlight" : "Surface");
+        if (_shownCall is { IsRinging: true } call) await _phone.AnswerAsync(call);
     }
+
+    private void OnHangup(object sender, RoutedEventArgs e)
+    {
+        if (_shownCall != null) _phone.Hangup(_shownCall);
+    }
+
+    private void OnMute(object sender, RoutedEventArgs e) => _phone.ToggleMute();
 
     private void OnHold(object sender, RoutedEventArgs e)
     {
-        _phone.ToggleHold();
-        HoldButton.Content = _phone.IsOnHold ? "Fortsetzen" : "Halten";
-        HoldButton.SetResourceReference(BackgroundProperty, _phone.IsOnHold ? "Highlight" : "Surface");
-        CallStateText.Text = _phone.IsOnHold ? "Gehalten" : "Verbunden";
+        if (_shownCall is not { } call) return;
+        if (call.IsOnHold) _phone.Resume(call);
+        else _phone.Hold(call);
+    }
+
+    private async void OnTransfer(object sender, RoutedEventArgs e)
+    {
+        if (_shownCall is not { IsConnected: true } call) return;
+        var dialog = new TransferWindow(_contacts, DisplayNameFor(call.Remote)) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Number is not { } number) return;
+
+        if (dialog.Consult)
+        {
+            // Rückfrage: aktuelles Gespräch wird gehalten, Ziel angerufen; danach „Verbinden“.
+            await Dial(number);
+        }
+        else if (await _phone.BlindTransferAsync(call, number) is { } error)
+        {
+            StatusText.Text = error;
+        }
+    }
+
+    private async void OnConnect(object sender, RoutedEventArgs e)
+    {
+        ConnectButton.IsEnabled = false;
+        if (await _phone.CompleteAttendedTransferAsync() is { } error) StatusText.Text = error;
+        ConnectButton.IsEnabled = true;
+    }
+
+    private async void OnSecondPrimary(object sender, RoutedEventArgs e)
+    {
+        if (_secondCall is not { } call) return;
+        if (call.IsRinging) await _phone.AnswerAsync(call);   // Anklopfen annehmen, aktuelles halten
+        else if (call.IsOnHold) _phone.Resume(call);          // Makeln
+    }
+
+    private void OnSecondHangup(object sender, RoutedEventArgs e)
+    {
+        if (_secondCall != null) _phone.Hangup(_secondCall);
     }
 
     private void UpdateCallTimer()
     {
-        CallTimer.Text = (DateTime.Now - _connectedAt).ToString(@"hh\:mm\:ss");
-        if (_phone.Quality is { } q)
+        if (_shownCall?.AnsweredAt is { } at) CallTimer.Text = (DateTime.Now - at).ToString(@"hh\:mm\:ss");
+        if (_secondCall is { IsOnHold: true } held)
+            SecondName.Text = $"{DisplayNameFor(held.Remote)} · {(DateTime.Now - (held.AnsweredAt ?? held.Start)).ToString(@"mm\:ss")}";
+
+        if (_shownCall?.Quality is { } q)
         {
             QualityText.Text = (q.Encrypted ? "Verschlüsselt (SRTP) · " : "Unverschlüsselt · ") +
                                $"Jitter {q.JitterMs:0} ms · Verlust {q.LossPercent:0.0} % · Puffer {q.BufferMs} ms · " +
                                (q.EchoCancellation ? "Echounterdrückung an" : "Echounterdrückung aus");
             QualityText.SetResourceReference(TextBlock.ForegroundProperty, q.LossPercent > 5 || q.JitterMs > 60 ? "Accent" : "Muted");
+        }
+        else
+        {
+            QualityText.Text = "";
         }
     }
 
@@ -368,7 +420,7 @@ public partial class MainWindow : Window
 
     private void UpdateTray()
     {
-        if (_phone.State == CallState.Incoming)
+        if (_phone.RingingCall != null)
         {
             _tray.SetStatus(TrayStatus.Ringing, "Eingehender Anruf");
             return;
@@ -385,57 +437,103 @@ public partial class MainWindow : Window
             RegistrationState.Failed => TrayStatus.Error,
             _ => TrayStatus.Offline
         };
-        _tray.SetStatus(status, _phone.State == CallState.Connected ? "Im Gespräch" : _registrationText);
+        _tray.SetStatus(status, _phone.Calls.Count > 0 ? "Im Gespräch" : _registrationText);
     }
 
-    private void ShowCallState(CallState state, string info)
+    /// <summary>Gesprächsbereich aus dem aktuellen Stand neu aufbauen (bis zu zwei Gespräche).</summary>
+    private void RefreshCalls(string info)
     {
-        if (state != CallState.Incoming) CloseIncomingWindow();
+        var calls = _phone.Calls;
+        if (_phone.RingingCall == null) CloseIncomingWindow();
         UpdateTray();
 
-        if (state == CallState.Idle)
+        if (calls.Count == 0)
         {
+            _shownCall = _secondCall = null;
             CallPanel.Visibility = Visibility.Collapsed;
             _callTimer.Stop();
             CallButton.IsEnabled = true;
+            CallButtonText.Text = "Anrufen";
             QualityText.Text = "";
+            HideCallerIdBox.IsChecked = _settings.HideCallerId; // gilt nur für einen Anruf
             if (!string.IsNullOrEmpty(info)) StatusText.Text = $"{DateTime.Now:HH:mm} {info}";
             return;
         }
 
-        var remote = _phone.Remote;
-        var number = remote?.Number ?? "";
+        // Groß: aktives Gespräch, sonst der klingelnde, sonst der gehaltene Anruf.
+        var shown = _phone.ActiveCall ?? _phone.RingingCall ?? _phone.HeldCall!;
+        var second = calls.FirstOrDefault(c => c != shown);
+        _shownCall = shown;
+        _secondCall = second;
 
         CallPanel.Visibility = Visibility.Visible;
-        CallButton.IsEnabled = false;
         SuggestionList.Visibility = Visibility.Collapsed;
-        CallStateText.Text = info;
-        CallName.Text = DisplayNameFor(remote);
-        var callContact = number.Length > 0 ? FindContact(number) : null;
-        CallAvatar.DisplayName = callContact?.Name ?? remote?.DisplayName ?? "";
-        CallAvatar.Image = callContact?.AvatarImage;
-        CallNumber.Text = number.Length > 0 ? number : "Rufnummer unterdrückt";
+
+        var number = shown.Remote.Number;
+        var contact = number.Length > 0 ? FindContact(number) : null;
+        CallName.Text = DisplayNameFor(shown.Remote);
+        CallAvatar.DisplayName = contact?.Name ?? shown.Remote.DisplayName;
+        CallAvatar.Image = contact?.AvatarImage;
+        CallNumber.Text = number.Length == 0 ? "Rufnummer unterdrückt"
+            : string.Join(" · ", new[] { number, contact?.FindNumber(number)?.TypeLabel }.Where(s => !string.IsNullOrEmpty(s)));
         CallNumber.Visibility = CallName.Text == number ? Visibility.Collapsed : Visibility.Visible;
-
-        AnswerButton.Visibility = state == CallState.Incoming ? Visibility.Visible : Visibility.Collapsed;
-        HangupButton.Content = state == CallState.Incoming ? "Ablehnen" : "Auflegen";
-        MuteButton.Visibility = HoldButton.Visibility =
-            state == CallState.Connected ? Visibility.Visible : Visibility.Collapsed;
-
-        if (state == CallState.Connected && !_callTimer.IsEnabled)
+        CallStateText.Text = string.Join(" · ", new[]
         {
-            _connectedAt = DateTime.Now;
-            CallTimer.Text = "00:00:00";
-            _callTimer.Start();
-            MuteButton.Content = "Stumm";
-            HoldButton.Content = "Halten";
-            MuteButton.SetResourceReference(BackgroundProperty, "Surface");
-            HoldButton.SetResourceReference(BackgroundProperty, "Surface");
-        }
-        else if (state != CallState.Connected)
+            shown.Info,
+            shown.Anonymous ? "Ihre Nummer wird unterdrückt" : null,
+            shown.IsHeldByRemote ? "von der Gegenseite gehalten" : null,
+            shown.ConsultationFor != null ? $"Rückfrage für {DisplayNameFor(shown.ConsultationFor.Remote)}" : null,
+        }.Where(s => !string.IsNullOrEmpty(s)));
+        if (shown.AnsweredAt == null) CallTimer.Text = "";
+
+        var connected = shown.IsConnected;
+        AnswerButton.Visibility = shown.IsRinging ? Visibility.Visible : Visibility.Collapsed;
+        HangupButton.Content = shown.IsRinging ? "Ablehnen" : "Auflegen";
+        MuteButton.Visibility = HoldButton.Visibility = TransferButton.Visibility =
+            connected ? Visibility.Visible : Visibility.Collapsed;
+        MuteButton.Content = shown.IsMuted ? "Stumm aus" : "Stumm";
+        MuteButton.SetResourceReference(BackgroundProperty, shown.IsMuted ? "Highlight" : "Surface");
+        HoldButton.Content = shown.IsOnHold ? "Fortsetzen" : "Halten";
+        HoldButton.SetResourceReference(BackgroundProperty, shown.IsOnHold ? "Highlight" : "Surface");
+        TransferButton.IsEnabled = !shown.IsOnHold && second == null;
+        // „Verbinden“: gehaltenes Gespräch an das aktive (Rückfrage-)Gespräch übergeben.
+        ConnectButton.Visibility = connected && !shown.IsOnHold && second is { IsOnHold: true }
+            ? Visibility.Visible : Visibility.Collapsed;
+
+        if (second != null)
         {
-            CallTimer.Text = "";
+            SecondCallBar.Visibility = Visibility.Visible;
+            if (second.IsRinging)
+            {
+                SecondIcon.Text = "";
+                SecondTitle.Text = "Anklopfen";
+                SecondName.Text = DisplayNameFor(second.Remote) + (second.Remote.Number.Length > 0 && DisplayNameFor(second.Remote) != second.Remote.Number ? $" · {second.Remote.Number}" : "");
+                SecondPrimaryButton.Content = "Annehmen";
+                SecondPrimaryButton.ToolTip = "Annehmen – das aktuelle Gespräch wird gehalten";
+                SecondHangupButton.Content = "Ablehnen";
+            }
+            else
+            {
+                SecondIcon.Text = "";
+                SecondTitle.Text = "Gehalten";
+                SecondName.Text = DisplayNameFor(second.Remote);
+                SecondPrimaryButton.Content = "Wechseln";
+                SecondPrimaryButton.ToolTip = "Zum gehaltenen Gespräch wechseln (das aktuelle wird gehalten)";
+                SecondHangupButton.Content = "Auflegen";
+            }
         }
+        else
+        {
+            SecondCallBar.Visibility = Visibility.Collapsed;
+        }
+
+        // Zweites Gespräch nur, wenn noch keine zwei laufen und keiner klingelt; dann als Rückfrage.
+        CallButton.IsEnabled = calls.Count < 2 && _phone.RingingCall == null;
+        CallButtonText.Text = _phone.ActiveCall is { IsConnected: true } ? "Rückfrage" : "Anrufen";
+
+        if (!_callTimer.IsEnabled) _callTimer.Start();
+        UpdateCallTimer();
+        if (!string.IsNullOrEmpty(info)) StatusText.Text = info;
     }
 
     private string DisplayNameFor(CallParty? party)
@@ -447,9 +545,10 @@ public partial class MainWindow : Window
         return number.Length > 0 ? number : "Unbekannt";
     }
 
-    private void ShowIncoming(CallParty caller)
+    private void ShowIncoming(PhoneCall call, bool waiting)
     {
         CloseIncomingWindow();
+        var caller = call.Remote;
         var name = DisplayNameFor(caller);
         var contact = caller.Number.Length > 0 ? FindContact(caller.Number) : null;
         var detail = caller.Number.Length == 0 ? "Rufnummer unterdrückt"
@@ -457,9 +556,9 @@ public partial class MainWindow : Window
             : string.Join(" · ", new[] { caller.Number, contact?.FindNumber(caller.Number)?.TypeLabel, contact?.Company }
                 .Where(s => !string.IsNullOrEmpty(s)));
 
-        _incomingWindow = new IncomingCallWindow(name, detail, contact?.AvatarImage,
-            answer: async () => { ShowFromTray(); await _phone.AnswerAsync(); },
-            reject: _phone.Hangup,
+        _incomingWindow = new IncomingCallWindow(name, detail, contact?.AvatarImage, waiting,
+            answer: async () => { ShowFromTray(); await _phone.AnswerAsync(call); },
+            reject: () => _phone.Hangup(call),
             silence: _phone.SilenceRinging);
         _incomingWindow.Closed += (_, _) => _incomingWindow = null;
         _incomingWindow.Show();
@@ -470,6 +569,29 @@ public partial class MainWindow : Window
     {
         _incomingWindow?.Close();
         _incomingWindow = null;
+    }
+
+    // ---------------- Mailbox ----------------
+
+    private int _announcedVoicemails;
+
+    private void ShowVoicemail(VoicemailStatus status)
+    {
+        VoicemailButton.Visibility = status.Waiting || _settings.VoicemailNumber.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        VoicemailBadge.Visibility = status.New > 0 ? Visibility.Visible : Visibility.Collapsed;
+        VoicemailCount.Text = status.New > 9 ? "9+" : status.New.ToString();
+        VoicemailButton.ToolTip = status.New > 0
+            ? $"{status.New} neue Sprachnachricht{(status.New == 1 ? "" : "en")} – Mailbox abhören"
+            : "Mailbox abhören";
+        if (status.New > _announcedVoicemails)
+            _tray.ShowBalloon("Neue Sprachnachricht", $"Sie haben {status.New} neue Sprachnachricht{(status.New == 1 ? "" : "en")}.");
+        _announcedVoicemails = status.New;
+    }
+
+    private async void OnVoicemail(object sender, RoutedEventArgs e)
+    {
+        if (_phone.VoicemailDialTarget() is { } target) await Dial(target);
+        else StatusText.Text = "Mailbox-Nummer bitte in den Einstellungen (Konto) eintragen.";
     }
 
     // ---------------- Nicht stören ----------------

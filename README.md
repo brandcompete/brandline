@@ -10,13 +10,18 @@ SIP-Softphone der brandcompete GmbH für Windows 10/11 (WPF, .NET 10), vorkonfig
 - Anrufen über Nummernfeld, Tastatur (Enter), Adressbuch, Anrufliste oder Wahlwiederholung
 - Vorschläge beim Tippen (Name, Firma oder Teil der Nummer) aus Adressbuch und Anrufliste
 - Eingehende Anrufe: Benachrichtigungsfenster unten rechts mit Name/Nummer, Annehmen/Ablehnen, Klingelton stumm
-- Halten, Stummschalten, Tonwahl (DTMF); zweiter Anruf während eines Gesprächs → „Besetzt“
+- Halten, Stummschalten, Tonwahl (DTMF)
+- **Zwei Leitungen**: Anklopfen (Hinweisfenster + Anklopfton), Annehmen hält das laufende Gespräch,
+  Makeln, einzeln auflegen; ein dritter Anruf bekommt „Besetzt“ (erscheint als verpasst)
+- **Weiterleiten**: direkt (REFER) oder mit Rückfrage – Ziel zuerst anrufen, dann „Verbinden“ (REFER mit Replaces)
+- **Mailbox-Anzeige** (MWI, `message-summary`): Symbol mit Zahl neuer Nachrichten, Klick ruft die Mailbox an
+- **Rufnummer unterdrücken** pro Anruf (Häkchen unter dem Nummernfeld, Vorgabe in den Einstellungen; `Privacy: id`)
 - **Nicht stören**: eingehende Anrufe werden abgewiesen (Placetel leitet z. B. zur Mailbox)
 - **Anrufliste** mit verpassten Anrufen (rot, Zähler im Reiter, Hinweis im Infobereich)
 - **Klingeltöne**: neun eingebaute, beliebig viele eigene MP3/WAV/WMA/M4A/AAC-Dateien, Probehören;
   **„Zufällig“** spielt bei jedem Anruf einen Ton aus einer wählbaren Auswahl (nie zweimal hintereinander denselben)
-- **Adressbuch** mit Avatar (Bild wird quadratisch zugeschnitten, sonst farbige Initialen) und Nummerntyp
-  Mobil (Standard) oder Festnetz
+- **Adressbuch** mit Avatar (Bild wird quadratisch zugeschnitten, sonst farbige Initialen) und beliebig vielen
+  Nummern je Kontakt (Mobil/Festnetz, optional Bezeichnung); beim Anrufen wird bei mehreren Nummern gefragt
 
 **Erscheinungsbild**
 - brandcompete-Design: Markenrot `#A91212`, Anthrazit `#1A1A2E`, Wortmarke „■ **brand**line“,
@@ -150,7 +155,8 @@ Alles liegt unter `%APPDATA%\Brandline` (Daten der Vorversion aus `%APPDATA%\BcS
 
 | Datei                                   | Zweck                                                        |
 |-----------------------------------------|--------------------------------------------------------------|
-| `Services/SipPhone.cs`                  | Registrierung, Anrufsteuerung, Keepalive, Neuanmeldung, STUN |
+| `Services/SipPhone.cs`                  | Registrierung, Anrufsteuerung (2 Leitungen, Weiterleiten), Mailbox-Abo, Keepalive, Neuanmeldung, STUN |
+| `Services/PhoneCall.cs`                 | Zustand eines einzelnen Gesprächs                            |
 | `Services/Audio/CallAudio.cs`           | Gesprächsaudio: Mikrofon → Codec → RTP → Jitter-Puffer → Lautsprecher |
 | `Services/Audio/EchoCancellingCapture.cs` | Windows Voice-Capture-DSP (Echo-/Rauschunterdrückung) per COM |
 | `Services/Audio/JitterBuffer.cs`        | Adaptiver Jitter-Puffer                                      |

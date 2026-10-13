@@ -11,9 +11,15 @@ public partial class IncomingCallWindow : Window
     private readonly Action _reject;
     private readonly Action _silence;
 
-    public IncomingCallWindow(string name, string detail, ImageSource? avatar, Action answer, Action reject, Action silence)
+    /// <param name="waiting">Anklopfen: es läuft bereits ein Gespräch, das beim Annehmen gehalten wird.</param>
+    public IncomingCallWindow(string name, string detail, ImageSource? avatar, bool waiting, Action answer, Action reject, Action silence)
     {
         InitializeComponent();
+        if (waiting)
+        {
+            KindText.Text = "Anklopfen";
+            AnswerText.Text = "Annehmen (aktuelles halten)";
+        }
         Avatar.DisplayName = name;
         Avatar.Image = avatar;
         NameText.Text = name;

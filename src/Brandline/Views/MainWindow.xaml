@@ -12,6 +12,20 @@
             <StackPanel>
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <!-- Mailbox: Zahl neuer Sprachnachrichten (SIP MWI), Klick wählt die Mailbox -->
+                        <Button x:Name="VoicemailButton" Style="{StaticResource HeaderIconButton}" Click="OnVoicemail"
+                                Visibility="Collapsed" ToolTip="Mailbox abhören">
+                            <Grid>
+                                <TextBlock Text="&#xE779;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border x:Name="VoicemailBadge" Background="{DynamicResource Accent}" CornerRadius="7" MinWidth="14"
+                                        Height="14" Padding="3,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Margin="0,-6,-9,0" Visibility="Collapsed">
+                                    <TextBlock x:Name="VoicemailCount" FontSize="9" FontWeight="Bold" Foreground="White"
+                                               FontFamily="{DynamicResource AppFont}" HorizontalAlignment="Center"/>
+                                </Border>
+                            </Grid>
+                        </Button>
                         <ToggleButton x:Name="DndToggle" Style="{StaticResource HeaderIconButton}" Content="&#xE708;"
                                       Click="OnDndClick"
                                       ToolTip="Nicht stören – eingehende Anrufe werden abgewiesen (z. B. zur Mailbox)"/>
@@ -71,12 +85,33 @@
                 <TextBlock x:Name="QualityText" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"/>
                 <WrapPanel Margin="0,10,0,0">
                     <Button x:Name="AnswerButton" Content="Annehmen" Style="{StaticResource GreenButton}"
-                            Click="OnAnswer" Margin="0,0,8,0" MinWidth="100"/>
+                            Click="OnAnswer" Margin="0,0,8,6" MinWidth="96"/>
                     <Button x:Name="HangupButton" Content="Auflegen" Style="{StaticResource RedButton}"
-                            Click="OnHangup" Margin="0,0,8,0" MinWidth="100"/>
-                    <Button x:Name="MuteButton" Content="Stumm" Click="OnMute" Margin="0,0,8,0"/>
-                    <Button x:Name="HoldButton" Content="Halten" Click="OnHold"/>
+                            Click="OnHangup" Margin="0,0,8,6" MinWidth="96"/>
+                    <Button x:Name="MuteButton" Content="Stumm" Click="OnMute" Margin="0,0,8,6"/>
+                    <Button x:Name="HoldButton" Content="Halten" Click="OnHold" Margin="0,0,8,6"/>
+                    <Button x:Name="TransferButton" Content="Weiterleiten" Click="OnTransfer" Margin="0,0,8,6"
+                            ToolTip="Gespräch direkt oder nach Rückfrage an eine andere Nummer übergeben"/>
+                    <Button x:Name="ConnectButton" Content="Verbinden" Style="{StaticResource AccentButton}" Click="OnConnect"
+                            Margin="0,0,8,6" ToolTip="Gehaltenes Gespräch mit dem aktuellen verbinden (Weiterleiten nach Rückfrage)"/>
                 </WrapPanel>
+                <!-- Zweites Gespräch: gehalten oder anklopfend -->
+                <Border x:Name="SecondCallBar" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}"
+                        BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,4,0,0" Visibility="Collapsed">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="SecondPrimaryButton" Click="OnSecondPrimary" Padding="10,4" Margin="0,0,6,0"/>
+                            <Button x:Name="SecondHangupButton" Style="{StaticResource RedButton}" Click="OnSecondHangup" Padding="10,4"/>
+                        </StackPanel>
+                        <TextBlock x:Name="SecondIcon" FontFamily="{StaticResource IconFont}" FontSize="14" Margin="0,0,8,0"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Accent}"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="SecondTitle" FontSize="12" Foreground="{DynamicResource Muted}"/>
+                            <TextBlock x:Name="SecondName" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
             </StackPanel>
         </Border>
 
@@ -97,8 +132,11 @@
                         <TextBox x:Name="NumberBox" FontSize="22" PreviewKeyDown="OnNumberKeyDown"
                                  TextChanged="OnNumberChanged" ToolTip="Nummer oder Name eingeben, Enter wählt"/>
                     </DockPanel>
-                    <TextBlock x:Name="NumberHint" Grid.Row="1" Foreground="{DynamicResource Muted}" FontSize="12"
-                               Margin="2,4,0,0" Height="18"/>
+                    <DockPanel Grid.Row="1" Margin="2,4,0,0">
+                        <CheckBox x:Name="HideCallerIdBox" DockPanel.Dock="Right" FontSize="12" Content="Nummer unterdrücken"
+                                  ToolTip="Eigene Rufnummer bei diesem Anruf nicht anzeigen"/>
+                        <TextBlock x:Name="NumberHint" Foreground="{DynamicResource Muted}" FontSize="12" VerticalAlignment="Center"/>
+                    </DockPanel>
                     <UniformGrid x:Name="DialPad" Grid.Row="2" Columns="3" Rows="4" Margin="18,6"/>
                     <!-- Vorschläge aus Adressbuch und Anrufliste, über dem Nummernfeld -->
                     <ListBox x:Name="SuggestionList" Grid.Row="2" VerticalAlignment="Top" MaxHeight="240"
@@ -121,7 +159,7 @@
                             FontSize="16" Padding="0,11" Margin="22,4,22,0" Click="OnCall">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0"/>
-                            <TextBlock Text="Anrufen"/>
+                            <TextBlock x:Name="CallButtonText" Text="Anrufen"/>
                         </StackPanel>
                     </Button>
                 </Grid>

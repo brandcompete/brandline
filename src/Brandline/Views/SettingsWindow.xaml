@@ -47,6 +47,11 @@
                         </Grid>
                         <TextBlock Text="Anzeigename (optional)" Style="{StaticResource Label}"/>
                         <TextBox x:Name="DisplayNameBox"/>
+                        <TextBlock Text="Mailbox-Nummer (optional)" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="VoicemailNumberBox"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,3,0,0"
+                                   Text="Zum Abhören per Klick auf das Mailbox-Symbol. Leer lassen, wenn Placetel die Adresse selbst meldet."/>
+                        <CheckBox x:Name="HideCallerIdDefaultBox" Margin="0,14,0,0" Content="Eigene Rufnummer standardmäßig unterdrücken"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
