@@ -26,9 +26,13 @@
                                 </Border>
                             </Grid>
                         </Button>
-                        <ToggleButton x:Name="DndToggle" Style="{StaticResource HeaderIconButton}" Content="&#xE708;"
+                        <!-- Flugzeug wie der Flugmodus am Handy -->
+                        <ToggleButton x:Name="DndToggle" Style="{StaticResource HeaderIconButton}" Content="&#xE709;"
                                       Click="OnDndClick"
                                       ToolTip="Nicht stören – eingehende Anrufe werden abgewiesen (z. B. zur Mailbox)"/>
+                        <!-- Mond im hellen, Sonne im dunklen Design -->
+                        <Button x:Name="ThemeButton" Style="{StaticResource HeaderIconButton}" Content="&#xE708;"
+                                Click="OnThemeToggle" ToolTip="Dunkles Design"/>
                         <Button Style="{StaticResource HeaderIconButton}" Content="&#xE713;" Click="OnSettings" ToolTip="Einstellungen"/>
                         <Button Style="{StaticResource HeaderIconButton}" Content="&#xE946;" Click="OnAbout" ToolTip="Über brandline"/>
                     </StackPanel>

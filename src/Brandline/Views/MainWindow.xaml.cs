@@ -56,6 +56,9 @@ public partial class MainWindow : Window
         BuildDialPad();
         DndToggle.IsChecked = settings.DoNotDisturb;
         HideCallerIdBox.IsChecked = settings.HideCallerId;
+        // Symbol folgt jedem Wechsel – per Schaltfläche, Einstellungen oder Windows („wie Windows“).
+        UpdateThemeButton();
+        Themes.ThemeManager.Changed += UpdateThemeButton;
 
         _tray = new TrayIcon(ShowFromTray, () => SetDoNotDisturb(!_phone.DoNotDisturb), () => OnSettings(this, new RoutedEventArgs()),
             () => OnAbout(this, new RoutedEventArgs()),
@@ -607,6 +610,23 @@ public partial class MainWindow : Window
         _tray.SetDoNotDisturb(on);
         StatusText.Text = on ? "Nicht stören ist an – eingehende Anrufe werden abgewiesen." : "Nicht stören ist aus.";
         UpdateTray();
+    }
+
+    // ---------------- Hell/Dunkel ----------------
+
+    /// <summary>Wechselt zwischen hellem und dunklem Design (auch aus „wie Windows“ heraus) und speichert die Wahl.</summary>
+    private void OnThemeToggle(object sender, RoutedEventArgs e)
+    {
+        _settings.Theme = Themes.ThemeManager.IsDark ? AppTheme.Light : AppTheme.Dark;
+        Themes.ThemeManager.Apply(_settings.Theme);
+        Storage.SaveSettings(_settings);
+    }
+
+    private void UpdateThemeButton()
+    {
+        var dark = Themes.ThemeManager.IsDark;
+        ThemeButton.Content = dark ? "" : "";
+        ThemeButton.ToolTip = dark ? "Helles Design" : "Dunkles Design";
     }
 
     // ---------------- Anrufliste ----------------
