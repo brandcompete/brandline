@@ -24,14 +24,30 @@ public static class Avatars
         source.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
         source.UriSource = new Uri(sourceFile);
         source.EndInit();
+        // Neuer Dateiname bei jeder Änderung, damit kein veraltetes Bild aus dem Cache erscheint.
+        return Save(source, $"{contactId:N}-{DateTime.Now:yyyyMMddHHmmss}.png");
+    }
 
+    /// <summary>Profilfoto aus Microsoft 365 (Bytes) unter festem Namen speichern bzw. ersetzen.</summary>
+    public static string ImportBytes(byte[] data, string fileName)
+    {
+        var source = new BitmapImage();
+        source.BeginInit();
+        source.CacheOption = BitmapCacheOption.OnLoad;
+        source.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+        source.StreamSource = new MemoryStream(data);
+        source.EndInit();
+        Cache.TryRemove(fileName, out _);
+        return Save(source, fileName);
+    }
+
+    private static string Save(BitmapSource source, string file)
+    {
         var side = Math.Min(source.PixelWidth, source.PixelHeight);
         var crop = new CroppedBitmap(source, new Int32Rect((source.PixelWidth - side) / 2, (source.PixelHeight - side) / 2, side, side));
         var scaled = new TransformedBitmap(crop, new ScaleTransform((double)Size / side, (double)Size / side));
 
         Directory.CreateDirectory(Folder);
-        // Neuer Dateiname bei jeder Änderung, damit kein veraltetes Bild aus dem Cache erscheint.
-        var file = $"{contactId:N}-{DateTime.Now:yyyyMMddHHmmss}.png";
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(scaled));
         using (var stream = File.Create(Path.Combine(Folder, file))) encoder.Save(stream);

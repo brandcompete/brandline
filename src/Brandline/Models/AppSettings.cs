@@ -85,6 +85,24 @@ public sealed class AppSettings
     /// <summary>Adresse der Versionsdatei (nur HTTPS). Wird über installer\defaults.json vorgegeben.</summary>
     public string UpdateUrl { get; set; } = "https://download.brandcompete.com/brandline/latest.json";
 
+    /// <summary>App-Registrierung in Entra ID (Client-ID) – leer = Microsoft-365-Anbindung nicht eingerichtet.</summary>
+    public string M365ClientId { get; set; } = "";
+
+    /// <summary>Verzeichnis-/Mandanten-ID des Microsoft-365-Mandanten.</summary>
+    public string M365TenantId { get; set; } = "";
+
+    /// <summary>Kolleginnen und Kollegen aus dem Firmenverzeichnis übernehmen (inkl. Profilfoto).</summary>
+    public bool M365SyncDirectory { get; set; } = true;
+
+    /// <summary>Persönliche Outlook-Kontakte übernehmen.</summary>
+    public bool M365SyncOutlook { get; set; } = true;
+
+    /// <summary>Ohne ausdrückliche Anmeldung still mit dem Windows-Konto anmelden (Entra-verbundene PCs).
+    /// Wird beim Abmelden ausgeschaltet.</summary>
+    public bool M365AutoSignIn { get; set; } = true;
+
+    public DateTime? M365LastSync { get; set; }
+
     [JsonIgnore]
     public string Password
     {

@@ -28,7 +28,18 @@ $knownLicenses = @{
     'Makaretu.Dns.Multicast' = 'MIT'          # https://github.com/richardschneider/net-mdns
 }
 
-$isPlatform ={ param($id) $id -match '^(Microsoft\.|System\.|runtime\.|NETStandard\.)' }
+# Microsoft-/System-Pakete unter MIT werden zusammengefasst. Microsoft-Pakete mit eigener Lizenzdatei
+# (z. B. Microsoft.Identity.Client.NativeInterop – „Microsoft Software License Terms“) bekommen einen eigenen
+# Eintrag mit vollständigem Lizenztext.
+$isPlatform = {
+    param($id)
+    if ($id -notmatch '^(Microsoft\.|System\.|runtime\.|NETStandard\.)') { return $false }
+    $version = ($packages | Where-Object Id -eq $id | Select-Object -First 1).Version
+    $nuspec = Get-ChildItem (Join-Path $cache ("{0}\{1}" -f $id.ToLowerInvariant(), $version)) -Filter *.nuspec -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $nuspec) { return $true }
+    [xml]$x = Get-Content $nuspec.FullName -Raw
+    return -not ($x.package.metadata.license -and $x.package.metadata.license.type -eq 'file')
+}
 
 $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine('brandline – Hinweise zu Drittkomponenten / Third-party notices')

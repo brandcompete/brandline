@@ -186,6 +186,14 @@
                         <Button Content="Neu" Click="OnNewContact" Margin="0,0,6,0"/>
                         <Button Content="Bearbeiten" Click="OnEditContact" Margin="0,0,6,0"/>
                         <Button Content="Löschen" Click="OnDeleteContact"/>
+                        <Button x:Name="M365SyncButton" Click="OnSyncM365" Margin="6,0,0,0" Padding="10,6"
+                                ToolTip="Kontakte aus Microsoft 365 jetzt aktualisieren" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE753;" FontFamily="{StaticResource IconFont}" Margin="0,2,6,0"
+                                           Foreground="{DynamicResource Teal}"/>
+                                <TextBlock Text="Aktualisieren"/>
+                            </StackPanel>
+                        </Button>
                     </WrapPanel>
                     <ListBox x:Name="ContactList" Margin="0,8,0,0" MouseDoubleClick="OnContactDoubleClick"
                              HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent">
@@ -199,8 +207,15 @@
                                         <TextBlock Text="{Binding Number}" Foreground="{DynamicResource Text}"/>
                                     </StackPanel>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <!-- Wolke = aus Microsoft 365 synchronisiert (dort gepflegt) -->
+                                            <TextBlock Text="&#xE753;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                                       Foreground="{DynamicResource Teal}" Margin="6,3,0,0"
+                                                       ToolTip="{Binding SourceLabel}"
+                                                       Visibility="{Binding IsSynced, Converter={StaticResource BoolToVisibility}}"/>
+                                        </StackPanel>
                                         <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource Muted}"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>

@@ -9,6 +9,7 @@
     <!-- Gleiche Schrift für alle Fluent-Standardsteuerelemente -->
     <FontFamily x:Key="ContentControlThemeFontFamily">pack://application:,,,/brandline;component/Fonts/#Rubik, Segoe UI</FontFamily>
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     <CornerRadius x:Key="Radius">8</CornerRadius>
 
     <Style x:Key="FlatButton" TargetType="Button">

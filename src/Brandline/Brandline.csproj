@@ -16,7 +16,7 @@
     <AssemblyTitle>brandline</AssemblyTitle>
     <Product>brandline</Product>
     <Company>brandcompete</Company>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Copyright>© brandcompete GmbH</Copyright>
   </PropertyGroup>
 
@@ -29,6 +29,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Client.Broker" Version="4.91.0" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.91.0" />
     <PackageReference Include="NAudio" Version="3.1.0" />
     <PackageReference Include="SIPSorcery" Version="10.0.17" />
   </ItemGroup>

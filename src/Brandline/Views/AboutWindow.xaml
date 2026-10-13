@@ -59,7 +59,7 @@
                 <StackPanel>
                     <TextBlock Text="Verwendete Open-Source-Komponenten" Style="{StaticResource Label}" Margin="0,0,0,4"/>
                     <TextBlock Style="{StaticResource Hint}" FontSize="12"
-                               Text="SIPSorcery (SIP/RTP, BSD-3-Clause) · NAudio (Audio, MIT) · .NET / WPF (MIT) · Schrift Rubik (SIL Open Font License 1.1)"/>
+                               Text="SIPSorcery (SIP/RTP, BSD-3-Clause) · NAudio (Audio, MIT) · .NET / WPF (MIT) · Microsoft Authentication Library (Anmeldung, MIT) · Schrift Rubik (SIL Open Font License 1.1) – Details in THIRD-PARTY-NOTICES.txt"/>
                 </StackPanel>
             </Border>
 

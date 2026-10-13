@@ -22,6 +22,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _callTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(1) };
     private readonly UpdateService _updates = new();
+    private readonly Microsoft365Service _m365 = new();
+    private readonly DispatcherTimer _m365Timer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private bool _m365Syncing;
     private UpdateInfo? _availableUpdate;
     private string? _announcedVersion;
     private readonly TrayIcon _tray;
@@ -40,7 +43,8 @@ public partial class MainWindow : Window
         Icon = TrayIcon.CreateWindowIcon();
         _settings = settings;
 
-        _contacts = new ObservableCollection<Contact>(Storage.LoadContacts());
+        // Eigene Kontakte und aus Microsoft 365 synchronisierte (getrennt gespeichert, hier gemeinsam angezeigt).
+        _contacts = new ObservableCollection<Contact>(Storage.LoadContacts().Concat(Storage.LoadSyncedContacts()));
         _contactView = CollectionViewSource.GetDefaultView(_contacts);
         _contactView.SortDescriptions.Add(new SortDescription(nameof(Contact.Name), ListSortDirection.Ascending));
         _contactView.Filter = FilterContact;
@@ -87,6 +91,15 @@ public partial class MainWindow : Window
             if (_settings.CheckForUpdates) await CheckForUpdatesAsync(manual: false);
         };
         _updateTimer.Start();
+
+        // Microsoft-365-Kontakte: 30 Sekunden nach dem Start, dann alle 6 Stunden.
+        _m365Timer.Tick += async (_, _) =>
+        {
+            _m365Timer.Interval = TimeSpan.FromHours(6);
+            await SyncMicrosoft365Async(manual: false);
+        };
+        _m365Timer.Start();
+        UpdateM365Button();
 
         if (!_settings.IsComplete)
         {
@@ -519,6 +532,12 @@ public partial class MainWindow : Window
     {
         if (SelectedCall is not { Number.Length: > 0 } c) return;
         var existing = FindContact(c.Number);
+        if (existing is { IsSynced: true })
+        {
+            MessageBox.Show(this, $"„{existing.Name}“ ist bereits im Adressbuch ({existing.SourceLabel}).", "Adressbuch",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         var dialog = new ContactWindow(existing ?? new Contact { Name = c.Name, Number = c.Number }) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         if (existing != null) _contacts[_contacts.IndexOf(existing)] = dialog.Contact;
@@ -546,8 +565,9 @@ public partial class MainWindow : Window
 
     // ---------------- Adressbuch ----------------
 
+    /// <summary>Kontakt zur Nummer – eigene Kontakte haben Vorrang vor synchronisierten.</summary>
     private Contact? FindContact(string number) =>
-        _contacts.FirstOrDefault(c => PhoneNumber.SameNumber(c.Number, number));
+        _contacts.Where(c => PhoneNumber.SameNumber(c.Number, number)).OrderBy(c => c.IsSynced).FirstOrDefault();
 
     private bool FilterContact(object item)
     {
@@ -582,7 +602,7 @@ public partial class MainWindow : Window
 
     private void OnEditContact(object sender, RoutedEventArgs e)
     {
-        if (SelectedContact is not { } c) return;
+        if (SelectedContact is not { } c || RefuseSynced(c)) return;
         var dialog = new ContactWindow(c) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         _contacts[_contacts.IndexOf(c)] = dialog.Contact;
@@ -591,12 +611,22 @@ public partial class MainWindow : Window
 
     private void OnDeleteContact(object sender, RoutedEventArgs e)
     {
-        if (SelectedContact is not { } c) return;
+        if (SelectedContact is not { } c || RefuseSynced(c)) return;
         if (MessageBox.Show(this, $"Kontakt „{c.Name}“ löschen?", "Adressbuch",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _contacts.Remove(c);
         Avatars.Delete(c.Avatar);
         SaveContacts();
+    }
+
+    /// <summary>Synchronisierte Kontakte werden in Microsoft 365 gepflegt und sind hier schreibgeschützt.</summary>
+    private bool RefuseSynced(Contact c)
+    {
+        if (!c.IsSynced) return false;
+        MessageBox.Show(this, $"„{c.Name}“ stammt aus dem {c.SourceLabel} und wird dort gepflegt. " +
+                              "Änderungen erscheinen hier bei der nächsten Synchronisierung.",
+            "Adressbuch", MessageBoxButton.OK, MessageBoxImage.Information);
+        return true;
     }
 
     private void SaveContacts()
@@ -615,7 +645,7 @@ public partial class MainWindow : Window
             return;
         }
         ShowFromTray();
-        var dialog = new SettingsWindow(_settings) { Owner = this };
+        var dialog = new SettingsWindow(_settings, _m365) { Owner = this };
         if (dialog.ShowDialog() != true) return;
 
         _settings = dialog.Settings;
@@ -624,7 +654,77 @@ public partial class MainWindow : Window
         ApplySystemIntegration(_settings);
         RegisterHotkey();
         StatusText.Text = "Einstellungen gespeichert.";
+        UpdateM365Button();
         await _phone.StartAsync(_settings);
+        // Neue Anmeldung, geänderte Quellen oder Abmeldung sofort übernehmen.
+        if (Microsoft365Service.IsConfigured(_settings)) StatusText.Text = await SyncMicrosoft365Async(manual: true);
+    }
+
+    private async void OnSyncM365(object sender, RoutedEventArgs e)
+    {
+        M365SyncButton.IsEnabled = false;
+        StatusText.Text = "Microsoft 365 wird synchronisiert …";
+        StatusText.Text = await SyncMicrosoft365Async(manual: true);
+        M365SyncButton.IsEnabled = true;
+    }
+
+    private void UpdateM365Button() =>
+        M365SyncButton.Visibility = Microsoft365Service.IsConfigured(_settings) ? Visibility.Visible : Visibility.Collapsed;
+
+    // ---------------- Microsoft 365 ----------------
+
+    public Microsoft365Service Microsoft365 => _m365;
+
+    /// <summary>
+    /// Kontakte aus Microsoft 365 abrufen und die synchronisierten Einträge im Adressbuch ersetzen.
+    /// Automatisch nur still (ohne Anmeldedialog); liefert eine Statusmeldung.
+    /// </summary>
+    public async Task<string> SyncMicrosoft365Async(bool manual)
+    {
+        if (!Microsoft365Service.IsConfigured(_settings)) return "Microsoft 365 ist nicht eingerichtet.";
+        if (!_settings.M365SyncDirectory && !_settings.M365SyncOutlook)
+        {
+            ReplaceSyncedContacts([]);
+            return "Keine Quelle ausgewählt – synchronisierte Kontakte entfernt.";
+        }
+        if (_m365Syncing) return "Synchronisierung läuft bereits …";
+
+        _m365Syncing = true;
+        try
+        {
+            var result = await Task.Run(() => _m365.SyncAsync(_settings));
+            ReplaceSyncedContacts(result.Contacts);
+            _settings.M365LastSync = DateTime.Now;
+            Storage.SaveSettings(_settings);
+            var text = $"Microsoft 365: {result.Directory} Kolleg:innen, {result.Outlook} Outlook-Kontakte";
+            if (manual) StatusText.Text = text;
+            return text;
+        }
+        catch (Microsoft.Identity.Client.MsalUiRequiredException)
+        {
+            // Abgemeldet: synchronisierte Daten nicht auf dem Rechner lassen.
+            if (!_settings.M365AutoSignIn) ReplaceSyncedContacts([]);
+            return "Bitte bei Microsoft 365 anmelden (Einstellungen → Microsoft 365).";
+        }
+        catch (Exception ex)
+        {
+            // Automatisch still (z. B. offline); manuell mit Grund.
+            var text = $"Microsoft 365: Synchronisierung fehlgeschlagen – {ex.Message}";
+            if (manual) StatusText.Text = text;
+            return text;
+        }
+        finally
+        {
+            _m365Syncing = false;
+        }
+    }
+
+    private void ReplaceSyncedContacts(List<Contact> synced)
+    {
+        foreach (var old in _contacts.Where(c => c.IsSynced).ToList()) _contacts.Remove(old);
+        foreach (var c in synced) _contacts.Add(c);
+        Storage.SaveSyncedContacts(synced);
+        _contactView.Refresh();
     }
 
     // ---------------- Updates ----------------
@@ -741,6 +841,8 @@ public partial class MainWindow : Window
         _hotkey?.Dispose();
         _updateTimer.Stop();
         _updates.Dispose();
+        _m365Timer.Stop();
+        _m365.Dispose();
         await _phone.DisposeAsync();
         _tray.Dispose();
         Close();

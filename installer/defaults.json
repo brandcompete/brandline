@@ -15,5 +15,10 @@
   "StunServer": "stun.l.google.com:19302",
   "EnableSipLog": false,
   "CheckForUpdates": true,
-  "UpdateUrl": "https://download.brandcompete.com/brandline/latest.json"
+  "UpdateUrl": "https://download.brandcompete.com/brandline/latest.json",
+  "M365ClientId": "",
+  "M365TenantId": "",
+  "M365SyncDirectory": true,
+  "M365SyncOutlook": true,
+  "M365AutoSignIn": true
 }

@@ -26,6 +26,13 @@ SIP-Softphone der brandcompete GmbH für Windows 10/11 (WPF, .NET 10), vorkonfig
   durch Markenrot ersetzt
 - „Über brandline“ mit Angaben zur brandcompete GmbH
 
+**Microsoft 365**
+- **Firmenverzeichnis** (Kolleginnen und Kollegen mit Geschäfts-/Mobilnummer und **Profilfoto**) und **persönliche
+  Outlook-Kontakte** im Adressbuch und bei eingehenden Anrufen; Abgleich beim Start und alle 6 Stunden
+- Anmeldung über den Windows-Anmeldebroker (MSAL/WAM) – auf Entra-verbundenen PCs automatisch mit dem Windows-Konto
+- Synchronisierte Einträge sind mit einer Wolke markiert und schreibgeschützt (in Microsoft 365 gepflegt);
+  eigene Kontakte haben bei gleicher Nummer Vorrang. Abmelden entfernt die synchronisierten Daten vom Rechner
+
 **Windows-Integration**
 - Läuft im **Infobereich** (Tray), Symbolfarbe zeigt den Status; Schließen minimiert nur
 - **Autostart** mit der Windows-Anmeldung (im Hintergrund)
@@ -103,6 +110,18 @@ Die Adresse der Versionsdatei steht in `installer\defaults.json` (`UpdateUrl`, S
 Der Server sollte `latest.json` nicht lange zwischenspeichern (kurzes `Cache-Control`).
 
 **Noch offen:** Code-Signatur (sonst warnt SmartScreen „Unbekannter Herausgeber“), Test auf sauberen Windows-10/11-Rechnern.
+
+## Microsoft 365 einrichten (einmalig, Entra-Administrator)
+
+1. entra.microsoft.com → Identität → Anwendungen → App-Registrierungen → **Neue Registrierung**:
+   Name `brandline`, **nur Konten in diesem Organisationsverzeichnis**.
+2. **Authentifizierung** → Plattform **Mobilgerät- und Desktopanwendungen** mit den Umleitungs-URIs
+   `ms-appx-web://microsoft.aad.brokerplugin/<Client-ID>` und `http://localhost`.
+3. **API-Berechtigungen** → Microsoft Graph, delegiert: `User.Read`, `Contacts.Read`, `User.Read.All`
+   → **Administratorzustimmung erteilen** (`User.Read.All` für die Rufnummern aus dem Firmenverzeichnis).
+4. Client-ID und Mandanten-ID in `installer\defaults.json` (`M365ClientId`, `M365TenantId`) eintragen und das MSI neu bauen.
+
+Das Token liegt verschlüsselt (DPAPI) unter `%APPDATA%\Brandline\msal.cache`, die Kontakte in `m365-contacts.json`.
 
 ## Hinweise zur Einrichtung
 

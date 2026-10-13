@@ -18,6 +18,8 @@ public partial class SettingsWindow : Window
     private CancellationTokenSource? _testCts;
     private List<RingtoneItem> _ringtones = [];
     private bool _loading = true;
+    private readonly Microsoft365Service? _m365;
+    private bool _m365AutoSignIn;
 
     /// <summary>Eintrag in der Klingelton-Liste; InPool = Teil der Auswahl für „Zufällig“.</summary>
     public sealed class RingtoneItem(RingtoneInfo info, bool inPool)
@@ -29,7 +31,7 @@ public partial class SettingsWindow : Window
         public bool InPool { get; set; } = inPool;
     }
 
-    public SettingsWindow(AppSettings settings)
+    public SettingsWindow(AppSettings settings, Microsoft365Service? m365 = null)
     {
         InitializeComponent();
         Icon = TrayIcon.CreateWindowIcon();
@@ -60,6 +62,15 @@ public partial class SettingsWindow : Window
         SipLogBox.IsChecked = settings.EnableSipLog;
         UpdateCheckBox.IsChecked = settings.CheckForUpdates;
         UpdateUrlBox.Text = settings.UpdateUrl;
+
+        _m365 = m365;
+        _m365AutoSignIn = settings.M365AutoSignIn;
+        M365ClientIdBox.Text = settings.M365ClientId;
+        M365TenantIdBox.Text = settings.M365TenantId;
+        M365DirectoryBox.IsChecked = settings.M365SyncDirectory;
+        M365OutlookBox.IsChecked = settings.M365SyncOutlook;
+        M365LastSync.Text = settings.M365LastSync is { } last ? $"Zuletzt synchronisiert: {last:dd.MM.yyyy HH:mm}" : "";
+        Loaded += async (_, _) => await RefreshM365StatusAsync();
 
         Loaded += (_, _) => { UserBox.Focus(); _loading = false; };
         Closed += (_, _) =>
@@ -163,6 +174,83 @@ public partial class SettingsWindow : Window
     {
         if ((sender as FrameworkElement)?.Tag is RingtoneItem item)
             PlayTest(() => _testTone.PlayRing(Selected(RingBox), item.Id), seconds: 5);
+    }
+
+    // ---------------- Microsoft 365 ----------------
+
+    /// <summary>Einstellungen mit den gerade eingetragenen IDs (noch nicht gespeichert).</summary>
+    private AppSettings M365Draft()
+    {
+        var s = _original.Clone();
+        s.M365ClientId = M365ClientIdBox.Text.Trim();
+        s.M365TenantId = M365TenantIdBox.Text.Trim();
+        s.M365AutoSignIn = _m365AutoSignIn;
+        return s;
+    }
+
+    private async Task RefreshM365StatusAsync()
+    {
+        var draft = M365Draft();
+        var configured = _m365 != null && Microsoft365Service.IsConfigured(draft);
+        M365SignInButton.IsEnabled = configured;
+        M365SignOutButton.IsEnabled = false;
+        if (!configured)
+        {
+            M365Status.Text = "Nicht eingerichtet – Client-ID und Mandanten-ID eintragen";
+            return;
+        }
+        try
+        {
+            var user = await _m365!.GetSignedInUserAsync(draft);
+            M365Status.Text = user != null ? $"Angemeldet als {user}"
+                : _m365AutoSignIn ? "Anmeldung automatisch mit dem Windows-Konto" : "Nicht angemeldet";
+            M365SignOutButton.IsEnabled = user != null || _m365AutoSignIn;
+        }
+        catch (Exception ex)
+        {
+            M365Status.Text = $"Fehler: {ex.Message}";
+        }
+    }
+
+    private async void OnM365ConfigChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_loading) await RefreshM365StatusAsync();
+    }
+
+    private async void OnM365SignIn(object sender, RoutedEventArgs e)
+    {
+        if (_m365 == null) return;
+        M365SignInButton.IsEnabled = false;
+        M365Status.Text = "Anmeldung läuft …";
+        try
+        {
+            var user = await _m365.SignInAsync(M365Draft(), new System.Windows.Interop.WindowInteropHelper(this).Handle);
+            _m365AutoSignIn = true;
+            M365Status.Text = $"Angemeldet als {user} – Kontakte werden nach dem Speichern geladen.";
+            M365SignOutButton.IsEnabled = true;
+        }
+        catch (Microsoft.Identity.Client.MsalException ex) when (ex.ErrorCode == "authentication_canceled")
+        {
+            await RefreshM365StatusAsync();
+        }
+        catch (Exception ex)
+        {
+            M365Status.Text = $"Anmeldung fehlgeschlagen: {ex.Message}";
+        }
+        finally
+        {
+            M365SignInButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnM365SignOut(object sender, RoutedEventArgs e)
+    {
+        if (_m365 == null) return;
+        // Abmelden schaltet auch die automatische Anmeldung mit dem Windows-Konto ab.
+        _m365AutoSignIn = false;
+        await _m365.SignOutAsync(M365Draft());
+        M365Status.Text = "Abgemeldet – synchronisierte Kontakte werden nach dem Speichern entfernt.";
+        M365SignOutButton.IsEnabled = false;
     }
 
     // ---------------- Design ----------------
@@ -273,6 +361,11 @@ public partial class SettingsWindow : Window
         s.EnableSipLog = SipLogBox.IsChecked == true;
         s.CheckForUpdates = UpdateCheckBox.IsChecked == true;
         s.UpdateUrl = UpdateUrlBox.Text.Trim();
+        s.M365ClientId = M365ClientIdBox.Text.Trim();
+        s.M365TenantId = M365TenantIdBox.Text.Trim();
+        s.M365SyncDirectory = M365DirectoryBox.IsChecked == true;
+        s.M365SyncOutlook = M365OutlookBox.IsChecked == true;
+        s.M365AutoSignIn = _m365AutoSignIn;
         if (PasswordBox.Password.Length > 0) s.Password = PasswordBox.Password;
 
         Settings = s;

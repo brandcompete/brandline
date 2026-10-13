@@ -19,6 +19,26 @@ public sealed class Contact
     public string Company { get; set; } = "";
     public string Note { get; set; } = "";
 
+    /// <summary>
+    /// Herkunft: leer = eigener Kontakt; „m365-directory“ (Firmenverzeichnis) bzw. „m365-outlook“
+    /// (persönliche Outlook-Kontakte) = aus Microsoft 365 synchronisiert, dort gepflegt und hier schreibgeschützt.
+    /// </summary>
+    public string Source { get; set; } = "";
+
+    /// <summary>Kennung in Microsoft 365 (Objekt-ID + Nummernart), nur bei synchronisierten Kontakten.</summary>
+    public string ExternalId { get; set; } = "";
+
+    [JsonIgnore]
+    public bool IsSynced => Source.Length > 0;
+
+    [JsonIgnore]
+    public string SourceLabel => Source switch
+    {
+        "m365-directory" => "Firmenverzeichnis (Microsoft 365)",
+        "m365-outlook" => "Outlook-Kontakt (Microsoft 365)",
+        _ => ""
+    };
+
     /// <summary>Dateiname des Avatars im Ordner %APPDATA%\Brandline\avatars, leer = Initialen.</summary>
     public string Avatar { get; set; } = "";
 
