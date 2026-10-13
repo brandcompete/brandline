@@ -58,6 +58,8 @@ public partial class SettingsWindow : Window
         StunBox.IsChecked = settings.UseStun;
         StunServerBox.Text = settings.StunServer;
         SipLogBox.IsChecked = settings.EnableSipLog;
+        UpdateCheckBox.IsChecked = settings.CheckForUpdates;
+        UpdateUrlBox.Text = settings.UpdateUrl;
 
         Loaded += (_, _) => { UserBox.Focus(); _loading = false; };
         Closed += (_, _) =>
@@ -239,6 +241,8 @@ public partial class SettingsWindow : Window
             problem = "Bitte das SIP-Passwort angeben.";
         else if (HotkeyBox.Text.Length > 0 && !GlobalHotkey.TryParse(HotkeyBox.Text, out _, out _))
             problem = "Das Tastenkürzel braucht mindestens eine Zusatztaste (Strg, Alt, Umschalt).";
+        else if (UpdateUrlBox.Text.Trim().Length > 0 && !UpdateUrlBox.Text.Trim().StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            problem = "Die Update-Adresse muss mit https:// beginnen.";
         else if (SelectedRingtone == Ringtones.RandomId && RandomPool.Count == 0)
             problem = "Für „Zufällig“ bitte mindestens einen Klingelton in der Auswahl ankreuzen.";
 
@@ -267,6 +271,8 @@ public partial class SettingsWindow : Window
         s.UseStun = StunBox.IsChecked == true;
         s.StunServer = StunServerBox.Text.Trim();
         s.EnableSipLog = SipLogBox.IsChecked == true;
+        s.CheckForUpdates = UpdateCheckBox.IsChecked == true;
+        s.UpdateUrl = UpdateUrlBox.Text.Trim();
         if (PasswordBox.Password.Length > 0) s.Password = PasswordBox.Password;
 
         Settings = s;

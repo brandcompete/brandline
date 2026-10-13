@@ -13,5 +13,7 @@
   "RandomRingTones": [ "classic", "marimba", "chime", "kalimba" ],
   "UseStun": false,
   "StunServer": "stun.l.google.com:19302",
-  "EnableSipLog": false
+  "EnableSipLog": false,
+  "CheckForUpdates": true,
+  "UpdateUrl": "https://download.brandcompete.com/brandline/latest.json"
 }

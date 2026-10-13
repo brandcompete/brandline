@@ -63,6 +63,13 @@
                 </StackPanel>
             </Border>
 
+            <DockPanel Margin="0,14,0,0">
+                <Button x:Name="CheckUpdatesButton" DockPanel.Dock="Left" Content="Nach Updates suchen" Click="OnCheckUpdates"
+                        Padding="10,4" FontSize="12"/>
+                <TextBlock x:Name="UpdateStatus" Style="{StaticResource Hint}" FontSize="12" Margin="10,0,0,0"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+
             <DockPanel Margin="0,18,0,0">
                 <Button DockPanel.Dock="Right" Content="Schließen" IsCancel="True" IsDefault="True"
                         Style="{StaticResource AccentButton}"/>

@@ -31,6 +31,24 @@
             </StackPanel>
         </Border>
 
+        <!-- Hinweis auf eine neue Version -->
+        <Border x:Name="UpdateBanner" DockPanel.Dock="Top" Visibility="Collapsed" Background="{DynamicResource Surface}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="16,10">
+            <DockPanel>
+                <StackPanel x:Name="UpdateButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Später" Click="OnUpdateLater" Padding="10,4" Margin="0,0,6,0"/>
+                    <Button Content="Installieren" Style="{StaticResource AccentButton}" Click="OnUpdateInstall" Padding="10,4"/>
+                </StackPanel>
+                <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource Accent}"
+                           FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"/>
+                    <TextBlock x:Name="UpdateDetail" FontSize="12" Foreground="{DynamicResource Muted}"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <!-- Statuszeile -->
         <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="16,7">
             <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis"/>

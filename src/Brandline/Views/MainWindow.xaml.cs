@@ -20,6 +20,10 @@ public partial class MainWindow : Window
     private readonly ICollectionView _contactView;
     private readonly ObservableCollection<CallRecord> _calls;
     private readonly DispatcherTimer _callTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(1) };
+    private readonly UpdateService _updates = new();
+    private UpdateInfo? _availableUpdate;
+    private string? _announcedVersion;
     private readonly TrayIcon _tray;
     private GlobalHotkey? _hotkey;
     private IncomingCallWindow? _incomingWindow;
@@ -75,6 +79,14 @@ public partial class MainWindow : Window
     {
         // Fensterhandle für das globale Tastenkürzel auch dann anlegen, wenn das Fenster verborgen startet.
         new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
+
+        // Update-Prüfung: erstmals eine Minute nach dem Start (Netz nach der Anmeldung abwarten), dann alle 12 Stunden.
+        _updateTimer.Tick += async (_, _) =>
+        {
+            _updateTimer.Interval = TimeSpan.FromHours(12);
+            if (_settings.CheckForUpdates) await CheckForUpdatesAsync(manual: false);
+        };
+        _updateTimer.Start();
 
         if (!_settings.IsComplete)
         {
@@ -615,10 +627,68 @@ public partial class MainWindow : Window
         await _phone.StartAsync(_settings);
     }
 
+    // ---------------- Updates ----------------
+
+    /// <summary>Sucht nach einer neuen Version; liefert eine Meldung für die manuelle Suche im Info-Fenster.</summary>
+    public async Task<string> CheckForUpdatesAsync(bool manual)
+    {
+        try
+        {
+            var info = await _updates.CheckAsync(_settings.UpdateUrl);
+            if (info == null) return $"brandline {UpdateService.CurrentVersion.ToString(3)} ist aktuell.";
+
+            _availableUpdate = info;
+            UpdateTitle.Text = $"brandline {info.Version} ist verfügbar";
+            UpdateDetail.Text = string.IsNullOrWhiteSpace(info.Notes) ? $"Installiert: {UpdateService.CurrentVersion.ToString(3)}" : info.Notes;
+            UpdateDetail.ToolTip = info.Notes;
+            UpdateButtons.Visibility = Visibility.Visible;
+            UpdateBanner.Visibility = Visibility.Visible;
+            if (_announcedVersion != info.Version && !manual)
+            {
+                _announcedVersion = info.Version;
+                _tray.ShowBalloon("Update verfügbar", $"brandline {info.Version} kann installiert werden.");
+            }
+            return $"Version {info.Version} ist verfügbar – siehe Hinweis im Hauptfenster.";
+        }
+        catch (Exception ex)
+        {
+            // Automatische Suche bleibt still (z. B. offline); bei der manuellen Suche Grund nennen.
+            return $"Suche nach Updates nicht möglich: {ex.Message}";
+        }
+    }
+
+    private void OnUpdateLater(object sender, RoutedEventArgs e) => UpdateBanner.Visibility = Visibility.Collapsed;
+
+    private async void OnUpdateInstall(object sender, RoutedEventArgs e)
+    {
+        if (_availableUpdate is not { } info) return;
+        if (_phone.State != CallState.Idle)
+        {
+            StatusText.Text = "Das Update kann erst nach dem Gespräch installiert werden.";
+            return;
+        }
+
+        UpdateButtons.Visibility = Visibility.Collapsed;
+        try
+        {
+            var progress = new Progress<double>(p => UpdateDetail.Text = $"Wird heruntergeladen … {p:P0}");
+            var msi = await _updates.DownloadAsync(_settings.UpdateUrl, info, progress);
+            UpdateDetail.Text = "Installation startet – brandline wird danach neu gestartet.";
+            UpdateService.StartInstall(msi);
+            // Sauber abmelden und beenden; das Installationsprogramm startet brandline anschließend neu.
+            await ExitAsync(force: true);
+        }
+        catch (Exception ex)
+        {
+            UpdateDetail.Text = ex.Message;
+            UpdateButtons.Visibility = Visibility.Visible;
+        }
+    }
+
     private void OnAbout(object sender, RoutedEventArgs e)
     {
         ShowFromTray();
-        new AboutWindow { Owner = this }.ShowDialog();
+        new AboutWindow(() => CheckForUpdatesAsync(manual: true)) { Owner = this }.ShowDialog();
     }
 
     public static void ApplySystemIntegration(AppSettings settings)
@@ -669,6 +739,8 @@ public partial class MainWindow : Window
         StatusText.Text = "Melde ab …";
         CloseIncomingWindow();
         _hotkey?.Dispose();
+        _updateTimer.Stop();
+        _updates.Dispose();
         await _phone.DisposeAsync();
         _tray.Dispose();
         Close();

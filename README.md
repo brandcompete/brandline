@@ -82,7 +82,25 @@ das neue MSI die alte Version automatisch.
 | Lizenzen | `THIRD-PARTY-NOTICES.txt` (erzeugt mit `tools\Generate-ThirdPartyNotices.ps1`), Installer-Lizenztext `installer\License.rtf` (**Entwurf, rechtlich prüfen**) |
 | Bilder | `installer\Assets\*.bmp`, erzeugt mit `tools\New-InstallerArt.ps1` |
 
-Stille Installation (z. B. per Skript): `msiexec /i brandline-0.5.0-x64.msi /qn` – optional mit `INSTALLFOLDER="D:\Apps\brandline"`
+Stille Installation (z. B. per Skript): `msiexec /i brandline-0.6.0-x64.msi /qn` – optional mit `INSTALLFOLDER="D:\Apps\brandline"`
+
+### Automatische Updates
+
+brandline sucht eine Minute nach dem Start und danach alle 12 Stunden nach einer neuen Version (abschaltbar in
+Einstellungen → Allgemein; manuell über „Über brandline → Nach Updates suchen“). Ist eine neuere Version da, erscheint
+ein Hinweis im Hauptfenster; „Installieren“ lädt das MSI, **prüft die SHA-256-Prüfsumme**, startet die Installation
+(Fortschrittsanzeige + Windows-Rückfrage für Administratorrechte) und danach brandline neu. Während eines Gesprächs
+wird kein Update gestartet. Es wird nur über **HTTPS** geladen.
+
+**Neue Version veröffentlichen:**
+1. `<Version>` in `src\Brandline\Brandline.csproj` hochzählen.
+2. `powershell -ExecutionPolicy Bypass -File tools\Build-Installer.ps1 -Notes "Was ist neu"`
+3. Auf den Update-Server laden (gleicher Ordner): **zuerst** `artifacts\brandline-<Version>-x64.msi`,
+   **dann** `artifacts\latest.json` – sonst finden Clients kurz eine Version, deren MSI noch fehlt.
+
+Die Adresse der Versionsdatei steht in `installer\defaults.json` (`UpdateUrl`, Standard
+`https://download.brandcompete.com/brandline/latest.json`) und ist pro Benutzer in den Einstellungen änderbar.
+Der Server sollte `latest.json` nicht lange zwischenspeichern (kurzes `Cache-Control`).
 
 **Noch offen:** Code-Signatur (sonst warnt SmartScreen „Unbekannter Herausgeber“), Test auf sauberen Windows-10/11-Rechnern.
 

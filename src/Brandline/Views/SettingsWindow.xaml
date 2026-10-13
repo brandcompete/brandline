@@ -146,6 +146,11 @@
                                    Text="Nur einschalten, wenn der Ton bei Gesprächen nur in eine Richtung läuft."/>
                         <TextBox x:Name="StunServerBox" Margin="28,6,0,0"/>
                         <CheckBox x:Name="SipLogBox" Margin="0,14,0,0" Content="SIP-Protokoll schreiben (zur Fehlersuche)"/>
+
+                        <TextBlock Text="Updates" Style="{StaticResource SectionTitle}" Margin="0,22,0,0"/>
+                        <CheckBox x:Name="UpdateCheckBox" Margin="0,8,0,0" Content="Automatisch nach neuen Versionen suchen"/>
+                        <TextBlock Text="Update-Adresse (HTTPS)" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="UpdateUrlBox"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

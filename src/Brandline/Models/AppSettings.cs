@@ -79,6 +79,12 @@ public sealed class AppSettings
     /// <summary>Schreibt alle SIP-Nachrichten nach %APPDATA%\Brandline\sip.log (zur Fehlersuche).</summary>
     public bool EnableSipLog { get; set; }
 
+    /// <summary>Automatisch nach neuen Versionen suchen (beim Start und alle 12 Stunden).</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>Adresse der Versionsdatei (nur HTTPS). Wird über installer\defaults.json vorgegeben.</summary>
+    public string UpdateUrl { get; set; } = "https://download.brandcompete.com/brandline/latest.json";
+
     [JsonIgnore]
     public string Password
     {
