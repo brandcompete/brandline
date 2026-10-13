@@ -42,7 +42,19 @@
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
 
+    <!-- Installationsordner ist im Installer wählbar (Standard: oben). Bei Updates wird der zuletzt gewählte
+         Ordner aus der Registry übernommen, sonst landete die neue Version im Standardordner und die alte
+         bliebe verwaist liegen. Per Kommandozeile: msiexec /i brandline.msi INSTALLFOLDER="D:\Apps\brandline" -->
+    <Property Id="INSTALLFOLDER">
+      <RegistrySearch Id="PreviousInstallFolder" Root="HKLM" Key="Software\brandcompete\brandline"
+                      Name="InstallFolder" Type="raw" Bitness="always64" />
+    </Property>
+
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="InstallFolderRegistry" Guid="*">
+        <RegistryValue Root="HKLM" Key="Software\brandcompete\brandline" Name="InstallFolder"
+                       Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      </Component>
       <Component Id="MainExecutable" Guid="*">
         <File Id="BrandlineExe" Source="$(var.AppDir)\brandline.exe" KeyPath="yes">
           <!-- Eingehende SIP/RTP-Verbindungen erlauben (sonst kommen eingehende Anrufe nicht an) -->
@@ -84,7 +96,8 @@
     </InstallExecuteSequence>
 
     <!-- ========== Oberfläche ========== -->
-    <ui:WixUI Id="WixUI_Minimal" />
+    <!-- Willkommen → Lizenz → Installationsordner wählen → Installieren → Fertig -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
     <WixVariable Id="WixUIDialogBmp" Value="Assets\dialog.bmp" />
     <WixVariable Id="WixUIBannerBmp" Value="Assets\banner.bmp" />

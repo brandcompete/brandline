@@ -74,7 +74,7 @@ das neue MSI die alte Version automatisch.
 
 | Was | Wie |
 |-----|-----|
-| Installationsort | `C:\Program Files\brandcompete\brandline` (pro Computer, Startmenü-Eintrag, „Apps & Features“) |
+| Installationsort | im Installer wählbar, Standard `C:\Program Files\brandcompete\brandline`; Updates übernehmen den gewählten Ordner (pro Computer, Startmenü-Eintrag, „Apps & Features“) |
 | Rechte | Installation braucht einmalig **Administratorrechte** (UAC) – wegen der Firewall-Regel |
 | Firewall | Eingehende Regel „brandline (SIP-Softphone)“ – ohne sie kommen eingehende Anrufe nicht an |
 | Update / Deinstallation | laufende App wird vorher sauber beendet (Abmeldung bei Placetel); bei Deinstallation werden Autostart und tel:-Links des Benutzers entfernt |
@@ -82,7 +82,7 @@ das neue MSI die alte Version automatisch.
 | Lizenzen | `THIRD-PARTY-NOTICES.txt` (erzeugt mit `tools\Generate-ThirdPartyNotices.ps1`), Installer-Lizenztext `installer\License.rtf` (**Entwurf, rechtlich prüfen**) |
 | Bilder | `installer\Assets\*.bmp`, erzeugt mit `tools\New-InstallerArt.ps1` |
 
-Stille Installation (z. B. per Skript): `msiexec /i brandline-0.4.0-x64.msi /qn`
+Stille Installation (z. B. per Skript): `msiexec /i brandline-0.5.0-x64.msi /qn` – optional mit `INSTALLFOLDER="D:\Apps\brandline"`
 
 **Noch offen:** Code-Signatur (sonst warnt SmartScreen „Unbekannter Herausgeber“), Test auf sauberen Windows-10/11-Rechnern.
 
