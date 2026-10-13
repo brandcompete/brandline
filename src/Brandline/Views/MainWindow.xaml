@@ -133,7 +133,9 @@
                                  TextChanged="OnNumberChanged" ToolTip="Nummer oder Name eingeben, Enter wählt"/>
                     </DockPanel>
                     <DockPanel Grid.Row="1" Margin="2,4,0,0">
+                        <!-- Padding ohne Abstand oben + zentriert: sonst sitzt der Text bei 12 pt höher als das Kästchen -->
                         <CheckBox x:Name="HideCallerIdBox" DockPanel.Dock="Right" FontSize="12" Content="Nummer unterdrücken"
+                                  Padding="8,0,0,0" VerticalContentAlignment="Center" VerticalAlignment="Center"
                                   ToolTip="Eigene Rufnummer bei diesem Anruf nicht anzeigen"/>
                         <TextBlock x:Name="NumberHint" Foreground="{DynamicResource Muted}" FontSize="12" VerticalAlignment="Center"/>
                     </DockPanel>
@@ -217,21 +219,20 @@
 
             <TabItem Header="Adressbuch">
                 <DockPanel Margin="12">
-                    <TextBox x:Name="SearchBox" DockPanel.Dock="Top" TextChanged="OnSearchChanged"
-                             ToolTip="Name, Firma oder Nummer suchen"/>
+                    <DockPanel DockPanel.Dock="Top">
+                        <!-- Neben der Suche statt bei den Schaltflächen unten: dort reicht die Breite nicht, es brach unschön um -->
+                        <Button x:Name="M365SyncButton" DockPanel.Dock="Right" Click="OnSyncM365" Margin="6,0,0,0" Padding="10,0"
+                                ToolTip="Kontakte aus Microsoft 365 jetzt aktualisieren" Visibility="Collapsed">
+                            <TextBlock Text="&#xE753;" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource Teal}"/>
+                        </Button>
+                        <TextBox x:Name="SearchBox" TextChanged="OnSearchChanged" ToolTip="Name, Firma oder Nummer suchen"/>
+                    </DockPanel>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                         <Button Content="Anrufen" Style="{StaticResource GreenButton}" Click="OnCallContact" Margin="0,0,6,0"/>
                         <Button Content="Neu" Click="OnNewContact" Margin="0,0,6,0"/>
                         <Button Content="Bearbeiten" Click="OnEditContact" Margin="0,0,6,0"/>
                         <Button Content="Löschen" Click="OnDeleteContact"/>
-                        <Button x:Name="M365SyncButton" Click="OnSyncM365" Margin="6,0,0,0" Padding="10,6"
-                                ToolTip="Kontakte aus Microsoft 365 jetzt aktualisieren" Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE753;" FontFamily="{StaticResource IconFont}" Margin="0,2,6,0"
-                                           Foreground="{DynamicResource Teal}"/>
-                                <TextBlock Text="Aktualisieren"/>
-                            </StackPanel>
-                        </Button>
                     </WrapPanel>
                     <ListBox x:Name="ContactList" Margin="0,8,0,0" MouseDoubleClick="OnContactDoubleClick"
                              HorizontalContentAlignment="Stretch" BorderThickness="0" Background="Transparent">
