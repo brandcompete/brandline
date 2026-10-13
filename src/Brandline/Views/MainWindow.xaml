@@ -111,7 +111,7 @@
                                     <v:AvatarView DisplayName="{Binding Name}" Image="{Binding Image}" Diameter="30" Margin="0,0,10,0"/>
                                     <StackPanel>
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource Heading}"/>
-                                        <TextBlock Text="{Binding Number}" Foreground="{DynamicResource Muted}" FontSize="12"/>
+                                        <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource Muted}" FontSize="12"/>
                                     </StackPanel>
                                 </DockPanel>
                             </DataTemplate>
@@ -204,7 +204,7 @@
                                     <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
                                         <TextBlock Text="{Binding TypeIcon}" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource Muted}"
                                                    Margin="0,2,6,0" ToolTip="{Binding TypeLabel}"/>
-                                        <TextBlock Text="{Binding Number}" Foreground="{DynamicResource Text}"/>
+                                        <TextBlock Text="{Binding NumberSummary}" Foreground="{DynamicResource Text}"/>
                                     </StackPanel>
                                     <StackPanel VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal">

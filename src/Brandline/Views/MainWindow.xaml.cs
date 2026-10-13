@@ -13,7 +13,7 @@ namespace Brandline.Views;
 
 public partial class MainWindow : Window
 {
-    private sealed record Suggestion(string Name, string Number, ImageSource? Image);
+    private sealed record Suggestion(string Name, string Number, ImageSource? Image, string Detail);
 
     private readonly SipPhone _phone = new();
     private readonly ObservableCollection<Contact> _contacts;
@@ -202,16 +202,19 @@ public partial class MainWindow : Window
 
         bool NumberMatches(string number) => digits.Length >= 2 && PhoneNumber.ForDialing(number).Contains(digits);
 
+        // Ein Vorschlag pro Rufnummer (bei Kontakten mit mehreren Nummern also mehrere).
         var fromContacts = _contacts
-            .Where(c => c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                        || c.Company.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                        || NumberMatches(c.Number))
-            .Select(c => new Suggestion(string.IsNullOrEmpty(c.Company) ? c.Name : $"{c.Name} ({c.Company})", c.Number, c.AvatarImage));
+            .SelectMany(c => c.Numbers.Select(n => (Contact: c, Number: n)))
+            .Where(x => x.Contact.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                        || x.Contact.Company.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                        || NumberMatches(x.Number.Number))
+            .Select(x => new Suggestion(string.IsNullOrEmpty(x.Contact.Company) ? x.Contact.Name : $"{x.Contact.Name} ({x.Contact.Company})",
+                x.Number.Number, x.Contact.AvatarImage, $"{x.Number.Number} · {x.Number.TypeLabel}"));
         var fromHistory = _calls
             .Where(c => c.Number.Length > 0 && (NumberMatches(c.Number) || c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)))
             .Select(c => FindContact(c.Number) is { } known
-                ? new Suggestion(known.Name, c.Number, known.AvatarImage)
-                : new Suggestion(c.Name.Length > 0 ? c.Name : "Anrufliste", c.Number, null));
+                ? new Suggestion(known.Name, c.Number, known.AvatarImage, $"{c.Number} · {known.FindNumber(c.Number)?.TypeLabel}")
+                : new Suggestion(c.Name.Length > 0 ? c.Name : "Anrufliste", c.Number, null, c.Number));
 
         var suggestions = fromContacts.Concat(fromHistory)
             .DistinctBy(s => PhoneNumber.Canonical(s.Number))
@@ -451,7 +454,8 @@ public partial class MainWindow : Window
         var contact = caller.Number.Length > 0 ? FindContact(caller.Number) : null;
         var detail = caller.Number.Length == 0 ? "Rufnummer unterdrückt"
             : name == caller.Number ? ""
-            : contact is { Company.Length: > 0 } ? $"{caller.Number} · {contact.Company}" : caller.Number;
+            : string.Join(" · ", new[] { caller.Number, contact?.FindNumber(caller.Number)?.TypeLabel, contact?.Company }
+                .Where(s => !string.IsNullOrEmpty(s)));
 
         _incomingWindow = new IncomingCallWindow(name, detail, contact?.AvatarImage,
             answer: async () => { ShowFromTray(); await _phone.AnswerAsync(); },
@@ -538,7 +542,7 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var dialog = new ContactWindow(existing ?? new Contact { Name = c.Name, Number = c.Number }) { Owner = this };
+        var dialog = new ContactWindow(existing ?? new Contact { Name = c.Name, Numbers = [new ContactNumber(c.Number)] }) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         if (existing != null) _contacts[_contacts.IndexOf(existing)] = dialog.Contact;
         else _contacts.Add(dialog.Contact);
@@ -567,7 +571,7 @@ public partial class MainWindow : Window
 
     /// <summary>Kontakt zur Nummer – eigene Kontakte haben Vorrang vor synchronisierten.</summary>
     private Contact? FindContact(string number) =>
-        _contacts.Where(c => PhoneNumber.SameNumber(c.Number, number)).OrderBy(c => c.IsSynced).FirstOrDefault();
+        _contacts.Where(c => c.HasNumber(number)).OrderBy(c => c.IsSynced).FirstOrDefault();
 
     private bool FilterContact(object item)
     {
@@ -577,7 +581,7 @@ public partial class MainWindow : Window
         var digits = PhoneNumber.ForDialing(q);
         return c.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)
                || c.Company.Contains(q, StringComparison.CurrentCultureIgnoreCase)
-               || (digits.Length > 0 && PhoneNumber.ForDialing(c.Number).Contains(digits));
+               || (digits.Length > 0 && c.Numbers.Any(n => PhoneNumber.ForDialing(n.Number).Contains(digits)));
     }
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e) => _contactView.Refresh();
@@ -586,7 +590,31 @@ public partial class MainWindow : Window
 
     private async void OnCallContact(object sender, RoutedEventArgs e)
     {
-        if (SelectedContact is { } c) await Dial(c.Number);
+        if (SelectedContact is { } c && await ChooseNumberAsync(c, sender as FrameworkElement) is { } number) await Dial(number);
+    }
+
+    /// <summary>
+    /// Nummer eines Kontakts wählen: bei einer Nummer direkt, bei mehreren über ein Auswahlmenü an der Schaltfläche.
+    /// </summary>
+    private Task<string?> ChooseNumberAsync(Contact contact, FrameworkElement? placement)
+    {
+        if (contact.Numbers.Count <= 1) return Task.FromResult<string?>(contact.Number.Length > 0 ? contact.Number : null);
+
+        var result = new TaskCompletionSource<string?>();
+        var menu = new ContextMenu { PlacementTarget = placement ?? ContactList, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        foreach (var n in contact.Numbers)
+        {
+            var item = new MenuItem
+            {
+                Header = $"{n.TypeLabel}:  {n.Number}",
+                Icon = new TextBlock { Text = n.TypeIcon, FontFamily = (FontFamily)FindResource("IconFont") },
+            };
+            item.Click += (_, _) => result.TrySetResult(n.Number);
+            menu.Items.Add(item);
+        }
+        menu.Closed += (_, _) => Dispatcher.BeginInvoke(() => result.TrySetResult(null));
+        menu.IsOpen = true;
+        return result.Task;
     }
 
     private void OnContactDoubleClick(object sender, MouseButtonEventArgs e) => OnCallContact(sender, e);

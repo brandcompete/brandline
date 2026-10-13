@@ -58,11 +58,11 @@ public static class Storage
     }
     public static void SaveSettings(AppSettings settings) => Save("settings.json", settings);
 
-    public static List<Contact> LoadContacts() => Load<List<Contact>>("contacts.json") ?? [];
+    public static List<Contact> LoadContacts() => (Load<List<Contact>>("contacts.json") ?? []).Select(c => c.Upgrade()).ToList();
     /// <summary>Speichert nur eigene Kontakte; synchronisierte stehen in m365-contacts.json.</summary>
     public static void SaveContacts(IEnumerable<Contact> contacts) => Save("contacts.json", contacts.Where(c => !c.IsSynced).ToList());
 
-    public static List<Contact> LoadSyncedContacts() => Load<List<Contact>>("m365-contacts.json") ?? [];
+    public static List<Contact> LoadSyncedContacts() => (Load<List<Contact>>("m365-contacts.json") ?? []).Select(c => c.Upgrade()).ToList();
     public static void SaveSyncedContacts(IEnumerable<Contact> contacts) => Save("m365-contacts.json", contacts.ToList());
 
     public const int MaxCallRecords = 500;

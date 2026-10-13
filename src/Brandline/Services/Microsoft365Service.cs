@@ -122,16 +122,15 @@ public sealed class Microsoft365Service : IDisposable
                 if (Str(user, "userType") == "Guest") continue;
 
                 var id = Str(user, "id");
-                var entries = Map(user, "m365-directory", Str(user, "companyName"),
-                    Join(Str(user, "jobTitle"), Str(user, "department")));
-                if (entries.Count == 0) continue;
+                if (Map(user, "m365-directory", Str(user, "companyName"), Join(Str(user, "jobTitle"), Str(user, "department"))) is not { } person)
+                    continue;
 
                 if (loadPhotos && await LoadPhotoAsync($"https://graph.microsoft.com/v1.0/users/{id}/photos/96x96/$value", $"m365-{id}.png", token, cancel) is { } avatar)
                 {
                     photos++;
-                    foreach (var e in entries) e.Avatar = avatar;
+                    person.Avatar = avatar;
                 }
-                contacts.AddRange(entries);
+                contacts.Add(person);
                 directoryCount++;
             }
         }
@@ -141,47 +140,37 @@ public sealed class Microsoft365Service : IDisposable
             const string url = "https://graph.microsoft.com/v1.0/me/contacts?$top=999&$select=id,displayName,companyName,jobTitle,businessPhones,mobilePhone,homePhones";
             foreach (var contact in await GetAllAsync(url, token, cancel))
             {
-                var entries = Map(contact, "m365-outlook", Str(contact, "companyName"), Str(contact, "jobTitle"));
-                contacts.AddRange(entries);
-                if (entries.Count > 0) outlookCount++;
+                if (Map(contact, "m365-outlook", Str(contact, "companyName"), Str(contact, "jobTitle")) is not { } person) continue;
+                contacts.Add(person);
+                outlookCount++;
             }
         }
 
         return new M365SyncResult(contacts, directoryCount, outlookCount, photos);
     }
 
-    /// <summary>Ein Eintrag pro Rufnummer: Mobil, Geschäftlich (Festnetz), Privat (Festnetz).</summary>
-    private static List<Contact> Map(JsonElement item, string source, string company, string note)
+    /// <summary>
+    /// Ein Kontakt pro Person mit allen Rufnummern: Mobil, Geschäftlich (Festnetz), Privat (Festnetz).
+    /// Null, wenn keine Rufnummer vorhanden ist.
+    /// </summary>
+    private static Contact? Map(JsonElement item, string source, string company, string note)
     {
-        var id = Str(item, "id");
         var name = Str(item, "displayName");
-        var result = new List<Contact>();
-        if (string.IsNullOrWhiteSpace(name)) return result;
+        if (string.IsNullOrWhiteSpace(name)) return null;
 
-        void Add(string number, PhoneType type, string kind, string extraNote = "")
+        var person = new Contact { Name = name, Company = company, Note = note, Source = source, ExternalId = Str(item, "id") };
+
+        void Add(string number, PhoneType type, string label = "")
         {
-            if (PhoneNumber.ForDialing(number).Length < 3) return;
-            if (result.Any(c => PhoneNumber.SameNumber(c.Number, number))) return;
-            result.Add(new Contact
-            {
-                Name = name,
-                Number = number.Trim(),
-                NumberType = type,
-                Company = company,
-                Note = Join(note, extraNote),
-                Source = source,
-                ExternalId = $"{id}:{kind}",
-            });
+            if (PhoneNumber.ForDialing(number).Length < 3 || person.HasNumber(number)) return;
+            person.Numbers.Add(new ContactNumber(number.Trim(), type, label));
         }
 
-        Add(Str(item, "mobilePhone"), PhoneType.Mobile, "mobile");
-        var i = 0;
-        foreach (var n in Strings(item, "businessPhones")) Add(n, PhoneType.Landline, $"business{i++}");
-        i = 0;
-        foreach (var n in Strings(item, "homePhones")) Add(n, PhoneType.Landline, $"home{i++}", "privat");
-        return result;
+        Add(Str(item, "mobilePhone"), PhoneType.Mobile);
+        foreach (var n in Strings(item, "businessPhones")) Add(n, PhoneType.Landline);
+        foreach (var n in Strings(item, "homePhones")) Add(n, PhoneType.Landline, "privat");
+        return person.Numbers.Count > 0 ? person : null;
     }
-
     /// <summary>Alle Seiten einer Graph-Liste abrufen (@odata.nextLink).</summary>
     private async Task<List<JsonElement>> GetAllAsync(string url, Func<Task<string>> token, CancellationToken cancel)
     {

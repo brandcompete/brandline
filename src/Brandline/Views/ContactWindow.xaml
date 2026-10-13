@@ -24,22 +24,23 @@
         <TextBox x:Name="NameBox" TextChanged="OnNameChanged"/>
         <TextBlock Text="Firma" Style="{StaticResource Label}"/>
         <TextBox x:Name="CompanyBox"/>
-        <TextBlock Text="Telefonnummer" Style="{StaticResource Label}"/>
-        <TextBox x:Name="NumberBox"/>
-        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-            <RadioButton x:Name="MobileRadio" GroupName="Type" IsChecked="True" Margin="0,0,24,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8EA;" FontFamily="{StaticResource IconFont}" Margin="0,2,6,0"/>
-                    <TextBlock Text="Mobil"/>
-                </StackPanel>
-            </RadioButton>
-            <RadioButton x:Name="LandlineRadio" GroupName="Type">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE717;" FontFamily="{StaticResource IconFont}" Margin="0,2,6,0"/>
-                    <TextBlock Text="Festnetz"/>
-                </StackPanel>
-            </RadioButton>
-        </StackPanel>
+        <TextBlock Text="Telefonnummern" Style="{StaticResource Label}"/>
+        <!-- Eine Zeile pro Nummer: Nummer, Art (Standard Mobil), entfernen. Die erste ist die Hauptnummer. -->
+        <ItemsControl x:Name="NumberList">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <DockPanel Margin="0,0,0,6">
+                        <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                Padding="9,6" Margin="6,0,0,0" ToolTip="Nummer entfernen" Click="OnRemoveNumber" Tag="{Binding}"/>
+                        <ComboBox DockPanel.Dock="Right" Width="120" Margin="6,0,0,0"
+                                  ItemsSource="{x:Static v:ContactWindow.TypeOptions}" DisplayMemberPath="Label"
+                                  SelectedValuePath="Type" SelectedValue="{Binding Type}"/>
+                        <TextBox Text="{Binding Number, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="+ Weitere Nummer" Click="OnAddNumber" HorizontalAlignment="Left" Padding="10,3" FontSize="12"/>
         <TextBlock Text="Notiz" Style="{StaticResource Label}"/>
         <TextBox x:Name="NoteBox" Height="64" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">

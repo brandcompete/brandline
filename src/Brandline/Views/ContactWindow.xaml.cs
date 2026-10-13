@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using Brandline.Models;
 using Brandline.Services;
@@ -10,6 +11,13 @@ public partial class ContactWindow : Window
     private readonly Guid _id;
     private readonly string _originalAvatar;
     private string _avatar;
+    private readonly ObservableCollection<ContactNumber> _numbers;
+
+    public sealed record TypeOption(PhoneType Type, string Label);
+
+    /// <summary>Auswahl für die Nummernart (in der XAML-Vorlage per x:Static verwendet).</summary>
+    public static IReadOnlyList<TypeOption> TypeOptions { get; } =
+        [new(PhoneType.Mobile, "Mobil"), new(PhoneType.Landline, "Festnetz")];
 
     public ContactWindow(Contact contact)
     {
@@ -19,10 +27,11 @@ public partial class ContactWindow : Window
         _originalAvatar = _avatar = contact.Avatar;
         NameBox.Text = contact.Name;
         CompanyBox.Text = contact.Company;
-        NumberBox.Text = contact.Number;
         NoteBox.Text = contact.Note;
-        MobileRadio.IsChecked = contact.NumberType == PhoneType.Mobile;
-        LandlineRadio.IsChecked = contact.NumberType == PhoneType.Landline;
+        // Kopien bearbeiten – das Original bleibt bei „Abbrechen“ unverändert. Neuer Kontakt: eine leere Mobilnummer.
+        _numbers = new ObservableCollection<ContactNumber>(contact.Numbers.Select(n => new ContactNumber(n.Number, n.Type, n.Label)));
+        if (_numbers.Count == 0) _numbers.Add(new ContactNumber());
+        NumberList.ItemsSource = _numbers;
         UpdateAvatar();
         Loaded += (_, _) => NameBox.Focus();
         Closed += (_, _) =>
@@ -73,9 +82,20 @@ public partial class ContactWindow : Window
         UpdateAvatar();
     }
 
+    private void OnAddNumber(object sender, RoutedEventArgs e) => _numbers.Add(new ContactNumber());
+
+    private void OnRemoveNumber(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not ContactNumber n) return;
+        _numbers.Remove(n);
+        if (_numbers.Count == 0) _numbers.Add(new ContactNumber());
+    }
+
     private void OnSave(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(NameBox.Text) || PhoneNumber.ForDialing(NumberBox.Text).Length == 0)
+        var numbers = _numbers.Where(n => PhoneNumber.ForDialing(n.Number).Length > 0)
+            .Select(n => new ContactNumber(n.Number.Trim(), n.Type, n.Label)).ToList();
+        if (string.IsNullOrWhiteSpace(NameBox.Text) || numbers.Count == 0)
         {
             MessageBox.Show(this, "Bitte Name und Telefonnummer angeben.", "Kontakt",
                 MessageBoxButton.OK, MessageBoxImage.Information);
@@ -90,8 +110,7 @@ public partial class ContactWindow : Window
             Id = _id,
             Name = NameBox.Text.Trim(),
             Company = CompanyBox.Text.Trim(),
-            Number = NumberBox.Text.Trim(),
-            NumberType = LandlineRadio.IsChecked == true ? PhoneType.Landline : PhoneType.Mobile,
+            Numbers = numbers,
             Note = NoteBox.Text.Trim(),
             Avatar = _avatar,
         };
