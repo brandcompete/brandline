@@ -39,7 +39,7 @@ public partial class App : Application
         var dialNumber = ParseDialArgument(e.Args);
         var command = dialNumber != null ? $"dial {dialNumber}" : "show";
 
-        if (!SystemIntegration.TryBecomePrimaryInstance())
+        if (!SystemIntegration.TryBecomePrimaryInstance() && !ReplaceInstanceFromOtherFolder(background))
         {
             // Läuft schon: Befehl weitergeben (beim Autostart nichts tun).
             if (!background) SystemIntegration.SendToPrimaryInstance(command);
@@ -70,6 +70,27 @@ public partial class App : Application
     {
         if (!File.Exists(Path.Combine(Storage.Folder, "settings.json"))) return;
         Storage.SaveSettings(settings);
+    }
+
+    /// <summary>
+    /// Läuft brandline aus einem anderen Ordner (typisch: alte, manuell kopierte Version neben der installierten),
+    /// fragen, ob diese beendet und stattdessen diese Version gestartet werden soll.
+    /// </summary>
+    /// <returns>True, wenn diese Instanz jetzt die laufende ist.</returns>
+    private static bool ReplaceInstanceFromOtherFolder(bool background)
+    {
+        // Beim Autostart keine Rückfrage – dann bleibt die bereits laufende Version aktiv.
+        if (background || SystemIntegration.FindInstanceFromOtherFolder() is not { } other) return false;
+
+        var ownVersion = typeof(App).Assembly.GetName().Version?.ToString(3);
+        var answer = MessageBox.Show(
+            $"Es läuft bereits eine andere brandline-Installation:\n{other.Path} (Version {other.Version})\n\n" +
+            $"Diese beenden und stattdessen brandline {ownVersion} aus\n{SystemIntegration.ExePath}\nstarten?",
+            SystemIntegration.AppName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return false;
+
+        SystemIntegration.ExitRunningInstances(TimeSpan.FromSeconds(5));
+        return SystemIntegration.TryBecomePrimaryInstance();
     }
 
     private static string? ParseDialArgument(string[] args)

@@ -165,8 +165,34 @@ public static class SystemIntegration
     /// <summary>True, wenn dies die erste laufende Instanz für diesen Benutzer ist.</summary>
     public static bool TryBecomePrimaryInstance()
     {
+        // Eigenen Griff aus einem früheren Versuch freigeben, sonst bleibt das Mutex-Objekt bestehen.
+        _mutex?.Dispose();
         _mutex = new Mutex(initiallyOwned: true, MutexName, out var created);
         return created;
+    }
+
+    /// <summary>
+    /// Läuft brandline bereits aus einem anderen Ordner (z. B. eine manuell kopierte Altversion)?
+    /// Dann würde diese Instanz nur das alte Fenster nach vorne holen – der Aufrufer kann nachfragen.
+    /// </summary>
+    public static (string Path, string Version)? FindInstanceFromOtherFolder()
+    {
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(ExePath)))
+        {
+            if (process.Id == Environment.ProcessId) continue;
+            try
+            {
+                var path = process.MainModule?.FileName;
+                if (path == null || string.Equals(path, ExePath, StringComparison.OrdinalIgnoreCase)) continue;
+                var version = FileVersionInfo.GetVersionInfo(path).ProductVersion?.Split('+')[0] ?? "?";
+                return (path, version);
+            }
+            catch
+            {
+                // Prozess eines anderen Benutzers oder bereits beendet.
+            }
+        }
+        return null;
     }
 
     /// <summary>
