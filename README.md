@@ -124,7 +124,11 @@ Der Server sollte `latest.json` nicht lange zwischenspeichern (kurzes `Cache-Con
    `ms-appx-web://microsoft.aad.brokerplugin/<Client-ID>` und `http://localhost`.
 3. **API-Berechtigungen** → Microsoft Graph, delegiert: `User.Read`, `Contacts.Read`, `User.Read.All`
    → **Administratorzustimmung erteilen** (`User.Read.All` für die Rufnummern aus dem Firmenverzeichnis).
-4. Client-ID und Mandanten-ID in `installer\defaults.json` (`M365ClientId`, `M365TenantId`) eintragen und das MSI neu bauen.
+4. Client-ID und Mandanten-ID in `installer\defaults.local.json` eintragen (wird nicht eingecheckt) und das MSI neu bauen:
+   ```json
+   { "M365ClientId": "<Client-ID>", "M365TenantId": "<Mandanten-ID>" }
+   ```
+   `tools\Build-Installer.ps1` überlagert damit `installer\defaults.json`.
 
 Das Token liegt verschlüsselt (DPAPI) unter `%APPDATA%\Brandline\msal.cache`, die Kontakte in `m365-contacts.json`.
 

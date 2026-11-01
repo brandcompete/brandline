@@ -73,7 +73,7 @@
       </Files>
       <!-- Startwerte für neue Benutzer; von der IT im Installationsordner anpassbar -->
       <Component Id="Defaults" Guid="*">
-        <File Id="DefaultsJson" Source="defaults.json" KeyPath="yes" />
+        <File Id="DefaultsJson" Source="$(var.DefaultsJson)" Name="defaults.json" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 

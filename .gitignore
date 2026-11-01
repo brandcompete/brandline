@@ -4,3 +4,7 @@ publish/
 .vs/
 *.user
 artifacts/
+
+# Lokal, nicht veröffentlichen: Mandanten-Vorgaben und Hinweise für Claude Code
+installer/defaults.local.json
+CLAUDE.md

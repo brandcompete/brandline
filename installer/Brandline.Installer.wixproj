@@ -9,7 +9,8 @@
     <Cultures>de-DE</Cultures>
     <ProductVersion Condition="'$(ProductVersion)' == ''">0.0.0</ProductVersion>
     <AppDir Condition="'$(AppDir)' == ''">$(MSBuildThisFileDirectory)..\artifacts\app</AppDir>
-    <DefineConstants>ProductVersion=$(ProductVersion);AppDir=$(AppDir)</DefineConstants>
+    <DefaultsJson Condition="'$(DefaultsJson)' == ''">$(MSBuildThisFileDirectory)defaults.json</DefaultsJson>
+    <DefineConstants>ProductVersion=$(ProductVersion);AppDir=$(AppDir);DefaultsJson=$(DefaultsJson)</DefineConstants>
     <!-- ICE-Hinweise zum Startmenü-Verknüpfungspfad bei Pro-Computer-Installation sind hier erwartbar -->
     <SuppressIces>ICE38;ICE43;ICE57</SuppressIces>
   </PropertyGroup>
